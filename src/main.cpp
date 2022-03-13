@@ -125,12 +125,12 @@ vector<Lexem *> parseLexem(string codeline) {
 }
 
 vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
-    vector<Lexem *> result;
+    vector<Lexem *> postfix;
     vector<Lexem *>::iterator it;
     stack <Lexem *> opers;
     for (it = infix.begin(); it != infix.end(); it++) {
         if (dynamic_cast<Number *>(*it)) {
-            result.push_back(*it);
+            postfix.push_back(*it);
         } else {
             switch (dynamic_cast<Oper *>(*it)->getType()) {
                 case LBRACKET:
@@ -139,7 +139,7 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
                 case RBRACKET:
                     delete *it;
                     while (dynamic_cast<Oper *>(opers.top())->getType() != LBRACKET) {
-                        result.push_back(dynamic_cast<Oper *>(opers.top()));
+                        postfix.push_back(dynamic_cast<Oper *>(opers.top()));
                         opers.pop();
                     }
                     delete opers.top();
@@ -148,7 +148,7 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
                 default:
                     while (!opers.empty() && dynamic_cast<Oper *>(opers.top())->getPriority() >=
                            dynamic_cast<Oper *>(*it)->getPriority()) {
-                        result.push_back(dynamic_cast<Oper *>(opers.top()));
+                        postfix.push_back(dynamic_cast<Oper *>(opers.top()));
                         opers.pop();
                     }
                     opers.push(*it);
@@ -156,14 +156,14 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
         }
     }
     while (!opers.empty()) {
-        result.push_back(opers.top());
+        postfix.push_back(opers.top());
         opers.pop();
     }
-    return result;
+    return postfix;
 }
 
 int evaluatePostfix(vector<Lexem *> postfix) {
-    int result;
+    int value;
     stack<Lexem *> eval;
     Number *leftArg, *rightArg;
     vector<Lexem *>::iterator it;
@@ -181,9 +181,9 @@ int evaluatePostfix(vector<Lexem *> postfix) {
             delete *it;
         }
     }
-    result = dynamic_cast<Number *>(eval.top())->getValue();
+    value = dynamic_cast<Number *>(eval.top())->getValue();
     delete eval.top();
-    return result;
+    return value;
 }
 
 void print(vector<Lexem *> v) {
