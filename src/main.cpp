@@ -13,16 +13,14 @@ using std::stack;
 
 enum OPERATOR {
     LBRACKET, RBRACKET,
-    ASSIGN,
     PLUS, MINUS,
     MULTIPLY
 };
 
 int PRIORITY[] = {
     -1, -1,
-    0,
-    1, 1,
-    2
+    0, 0,
+    1
 };
 
 class Lexem {
@@ -55,22 +53,6 @@ int Number::getValue() const {
     return value;
 }
 
-Variable::Variable(const string & name) {
-    Variable::name = name;
-}
-
-string Variable::getName() const {
-    return name;
-}
-
-int Variable::getValue() const {
-    return value;
-}
-
-void Variable::setValue(int value) {
-    Variable::value = value;
-}
-
 Oper::Oper(OPERATOR opertype) {
     Oper::opertype = opertype;
 }
@@ -85,19 +67,17 @@ int Oper::getPriority() const {
             return PRIORITY[0];
         case RBRACKET:
             return PRIORITY[1];
-        case ASSIGN:
-            return PRIORITY[2];
         case PLUS:
-            return PRIORITY[3];
+            return PRIORITY[2];
         case MINUS:
-            return PRIORITY[4];
+            return PRIORITY[3];
         case MULTIPLY:
-            return PRIORITY[5];
+            return PRIORITY[4];
     }
     return -1;
 }
 
-int Oper::getValue(const Variable & left, const Number & right) const {
+int Oper::getValue(const Number & left, const Number & right) const {
     switch (opertype) {
         case PLUS:
             return left.getValue() + right.getValue();
@@ -159,9 +139,8 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
     vector<Lexem *> result;
     vector<Lexem *>::iterator it;
     stack <Lexem *> opers;
-    Oper *currentTop;
     for (it = infix.begin(); it != infix.end(); it++) {
-        if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
+        if (dynamic_cast<Number *>(*it)) {
             result.push_back(*it);
         } else {
             switch (dynamic_cast<Oper *>(*it)->getType()) {
@@ -170,22 +149,18 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
                     break;
                 case RBRACKET:
                     delete *it;
-                    currentTop = dynamic_cast<Oper *>(opers.top());
-                    while (currentTop->getType() != LBRACKET) {
-                        result.push_back(currentTop);
+                    while (dynamic_cast<Oper *>(opers.top())->getType() != LBRACKET) {
+                        result.push_back(dynamic_cast<Oper *>(opers.top()));
                         opers.pop();
-                        currentTop = dynamic_cast<Oper *>(opers.top());
                     }
                     delete opers.top();
                     opers.pop();
                     break;
                 default:
-                    currentTop = dynamic_cast<Oper *>(opers.top());
-                    while (!opers.empty() && currentTop->getPriority() >=
+                    while (!opers.empty() && dynamic_cast<Oper *>(opers.top())->getPriority() >=
                            dynamic_cast<Oper *>(*it)->getPriority()) {
-                        result.push_back(currentTop);
+                        result.push_back(dynamic_cast<Oper *>(opers.top()));
                         opers.pop();
-                        currentTop = dynamic_cast<Oper *>(opers.top());
                     }
                     opers.push(*it);
             }
@@ -204,7 +179,7 @@ int evaluatePostfix(vector<Lexem *> postfix) {
     Number *leftArg, *rightArg;
     vector<Lexem *>::iterator it;
     for (it = postfix.begin(); it != postfix.end(); it++) {
-        if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
+        if (dynamic_cast<Number *>(*it)) {
             eval.push(*it);
         } else {
             rightArg = dynamic_cast<Number *>(eval.top());
@@ -227,13 +202,10 @@ void print(vector<Lexem *> v) {
     for (it = v.begin(); it != v.end(); it++) {
         if (dynamic_cast<Number *>(*it)) {
             cout << dynamic_cast<Number *>(*it)->getValue();
-        } else if (dynamic_cast<Oper *>(*it)) {
+        } else {
             switch (dynamic_cast<Oper *>(*it)->getType()) {
                 case PLUS:
                     cout << '+';
-                    break;
-                case ASSIGN:
-                    cout << '=';
                     break;
                 case MINUS:
                     cout << '-';
@@ -248,8 +220,6 @@ void print(vector<Lexem *> v) {
                     cout << ')';
                     break;
             }
-        } else {
-            cout << dynamic_cast<Variable *>(*it)->getName();
         }
     }
     cout << endl;
