@@ -17,6 +17,12 @@ enum OPERATOR {
     MULTIPLY
 };
 
+char OPERATOR_STRING[] = {
+    '(', ')',
+    '+', '-',
+    '*'
+};
+
 int PRIORITY[] = {
     -1, -1,
     0, 0,
@@ -62,17 +68,10 @@ OPERATOR Oper::getType() const {
 }
 
 int Oper::getPriority() const {
-    switch (opertype) {
-        case LBRACKET:
-            return PRIORITY[0];
-        case RBRACKET:
-            return PRIORITY[1];
-        case PLUS:
-            return PRIORITY[2];
-        case MINUS:
-            return PRIORITY[3];
-        case MULTIPLY:
-            return PRIORITY[4];
+    for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
+        if (opertype == OPERATOR(i)) {
+            return PRIORITY[i];
+        }
     }
     return -1;
 }
@@ -96,43 +95,33 @@ bool isDigit(char symbol) {
 }
 
 vector<Lexem *> parseLexem(string codeline) {
-    vector<Lexem *> result;
+    vector<Lexem *> infix;
     string::iterator it;
     int number = 0, prevSymIsDigit = 0;
 
     for (it = codeline.begin(); it != codeline.end(); it++) {
-        if (isDigit(*it)) {
+        if (*it == ' ' && *it == '\t') {
+            continue;
+        } else if (isDigit(*it)) {
             number = number * 10 + *it - '0';
             prevSymIsDigit = 1;
-        } else if (*it != ' ' && *it != '\t'){
+        } else {
             if (prevSymIsDigit) {
-                result.push_back(new Number(number));
+                infix.push_back(new Number(number));
                 number = 0;
             }
             prevSymIsDigit = 0;
-            switch (*it) {
-                case '(':
-                    result.push_back(new Oper(LBRACKET));
-                    break;
-                case ')':
-                    result.push_back(new Oper(RBRACKET));
-                    break;
-                case '+':
-                    result.push_back(new Oper(PLUS));
-                    break;
-                case '-':
-                    result.push_back(new Oper(MINUS));
-                    break;
-                case '*':
-                    result.push_back(new Oper(MULTIPLY));
-                    break;
+            for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
+                if (*it == OPERATOR_STRING[i]) {
+                    infix.push_back(new Oper(OPERATOR(i)));
+                }
             }
         }
     }
     if (prevSymIsDigit) {
-        result.push_back(new Number(number));
+        infix.push_back(new Number(number));
     }
-    return result;
+    return infix;
 }
 
 vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
