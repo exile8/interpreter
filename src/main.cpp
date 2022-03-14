@@ -128,6 +128,25 @@ vector<Lexem *> parseLexem(string codeline) {
     return infix;
 }
 
+void buildBracketExpr(vector<Lexem *> & postfix, stack<Lexem *> & opers) {
+    while (dynamic_cast<Oper *>(opers.top())->getType() != LBRACKET) {
+        postfix.push_back(opers.top());
+        opers.pop();
+    }
+    delete opers.top();
+    opers.pop();
+}
+
+void sortOpers(vector<Lexem *> & postfix, stack<Lexem *> & opers, 
+                                                int curPriority) {
+    while (!opers.empty() && 
+           dynamic_cast<Oper *>(opers.top())->getPriority() >=
+                                                 curPriority) {
+        postfix.push_back(opers.top());
+        opers.pop();
+    }
+}
+
 vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
     vector<Lexem *> postfix;
     vector<Lexem *>::iterator it;
@@ -142,20 +161,13 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
                     break;
                 case RBRACKET:
                     delete *it;
-                    while (dynamic_cast<Oper *>(opers.top())->getType() != LBRACKET) {
-                        postfix.push_back(dynamic_cast<Oper *>(opers.top()));
-                        opers.pop();
-                    }
-                    delete opers.top();
-                    opers.pop();
+                    buildBracketExpr(postfix, opers);
                     break;
                 default:
-                    while (!opers.empty() && dynamic_cast<Oper *>(opers.top())->getPriority() >=
-                           dynamic_cast<Oper *>(*it)->getPriority()) {
-                        postfix.push_back(dynamic_cast<Oper *>(opers.top()));
-                        opers.pop();
-                    }
+                    sortOpers(postfix, opers,
+                        dynamic_cast<Oper *>(*it)->getPriority());
                     opers.push(*it);
+                    break;
             }
         }
     }
