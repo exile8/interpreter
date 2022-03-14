@@ -13,20 +13,23 @@ using std::stack;
 
 enum OPERATOR {
     LBRACKET, RBRACKET,
+    ASSIGN,
     PLUS, MINUS,
     MULTIPLY
 };
 
 char OPERATOR_STRING[] = {
     '(', ')',
+    '=',
     '+', '-',
     '*'
 };
 
 int PRIORITY[] = {
     -1, -1,
-    0, 0,
-    1
+    0,
+    1, 1,
+    2
 };
 
 class Lexem {
@@ -40,6 +43,14 @@ class Number : public Lexem {
 public:
     Number(int value);
     int getValue() const;
+};
+
+class Variable : public Lexem {
+    string name;
+public:
+    Variable(string name);
+    string getName() const;
+    void setName(string name);
 };
 
 class Oper : public Lexem {
@@ -57,6 +68,18 @@ Number::Number(int value) {
 
 int Number::getValue() const {
     return value;
+}
+
+Variable::Variable(string name) {
+    setName(name);
+}
+
+string Variable::getName() const {
+    return name;
+}
+
+void Variable::setName(string name) {
+    Variable::name = name;
 }
 
 Oper::Oper(OPERATOR opertype) {
@@ -219,6 +242,9 @@ void print(vector<Lexem *> v) {
                     break;
                 case MINUS:
                     cout << '-';
+                    break;
+                case ASSIGN:
+                    cout << '=';
                     break;
                 case MULTIPLY:
                     cout << '*';
