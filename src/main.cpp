@@ -94,6 +94,14 @@ bool isDigit(char symbol) {
     return symbol >= '0' && symbol <= '9';
 }
 
+void appendOper(vector <Lexem *> & infix, char symbol) {
+    for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
+        if (symbol == OPERATOR_STRING[i]) {
+            infix.push_back(new Oper(OPERATOR(i)));
+        }
+    }
+}
+
 vector<Lexem *> parseLexem(string codeline) {
     vector<Lexem *> infix;
     string::iterator it;
@@ -111,11 +119,7 @@ vector<Lexem *> parseLexem(string codeline) {
                 number = 0;
             }
             prevSymIsDigit = 0;
-            for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
-                if (*it == OPERATOR_STRING[i]) {
-                    infix.push_back(new Oper(OPERATOR(i)));
-                }
-            }
+            appendOper(infix, *it);
         }
     }
     if (prevSymIsDigit) {
@@ -162,23 +166,28 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
     return postfix;
 }
 
+Number * currentResult(stack <Lexem *> & eval, Oper *operation) {
+    Number *rightArg, *leftArg, *result;
+    rightArg = dynamic_cast<Number *>(eval.top());
+    eval.pop();
+    leftArg = dynamic_cast<Number *>(eval.top());
+    eval.pop();
+    result = new Number(operation->getValue(*leftArg, *rightArg));
+    delete rightArg;
+    delete leftArg;
+    delete operation;
+    return result;
+}
+
 int evaluatePostfix(vector<Lexem *> postfix) {
     int value;
     stack<Lexem *> eval;
-    Number *leftArg, *rightArg;
     vector<Lexem *>::iterator it;
     for (it = postfix.begin(); it != postfix.end(); it++) {
         if (dynamic_cast<Number *>(*it)) {
             eval.push(*it);
         } else {
-            rightArg = dynamic_cast<Number *>(eval.top());
-            eval.pop();
-            leftArg = dynamic_cast<Number *>(eval.top());
-            eval.pop();
-            eval.push(new Number(dynamic_cast<Oper *>(*it)->getValue(*leftArg, *rightArg)));
-            delete rightArg;
-            delete leftArg;
-            delete *it;
+            eval.push(currentResult(eval, dynamic_cast<Oper *>(*it)));
         }
     }
     value = dynamic_cast<Number *>(eval.top())->getValue();
