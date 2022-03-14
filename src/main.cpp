@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 #include <stack>
+#include <map>
+#include <cctype>
 
 using std::getline;
 using std::cin;
@@ -10,6 +12,7 @@ using std::endl;
 using std::string;
 using std::vector;
 using std::stack;
+using std::map;
 
 enum OPERATOR {
     LBRACKET, RBRACKET,
@@ -52,6 +55,8 @@ public:
     string getName() const;
     void setName(string name);
 };
+
+map<string, Variable *> vars;
 
 class Oper : public Lexem {
     OPERATOR opertype;
@@ -113,10 +118,6 @@ int Oper::getValue(const Number & left, const Number & right) const {
     return -1;
 }
 
-bool isDigit(char symbol) {
-    return symbol >= '0' && symbol <= '9';
-}
-
 void appendOper(vector <Lexem *> & infix, char symbol) {
     for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
         if (symbol == OPERATOR_STRING[i]) {
@@ -128,20 +129,28 @@ void appendOper(vector <Lexem *> & infix, char symbol) {
 vector<Lexem *> parseLexem(string codeline) {
     vector<Lexem *> infix;
     string::iterator it;
-    int number = 0, prevSymIsDigit = 0;
-
+    int number = 0, prevSymIsDigit = 0, prevSymIsVar = 0;
+    string var;
     for (it = codeline.begin(); it != codeline.end(); it++) {
         if (*it == ' ' && *it == '\t') {
             continue;
-        } else if (isDigit(*it)) {
+        } else if (isdigit(*it)) {
             number = number * 10 + *it - '0';
             prevSymIsDigit = 1;
+        } else if (isalpha(*it)) {
+            var.push_back(*it);
+            prevSymIsVar = 1;
         } else {
             if (prevSymIsDigit) {
                 infix.push_back(new Number(number));
                 number = 0;
             }
+            if (prevSymIsVar) {
+                infix.push_back(new Variable(var));
+                var.clear();
+            }
             prevSymIsDigit = 0;
+            prevSymIsVar = 0;
             appendOper(infix, *it);
         }
     }
@@ -160,13 +169,23 @@ void buildBracketExpr(vector<Lexem *> & postfix, stack<Lexem *> & opers) {
     opers.pop();
 }
 
-void sortOpers(vector<Lexem *> & postfix, stack<Lexem *> & opers, 
-                                                int curPriority) {
-    while (!opers.empty() && 
-           dynamic_cast<Oper *>(opers.top())->getPriority() >=
+void sortOpers(vector<Lexem *> & postfix, stack<Lexem *> & opers,
+                                                    Oper * operation) {
+    int curPriority = operation->getPriority();
+    if (operation->getType() == ASSIGN) {
+        while (!opers.empty() && 
+            dynamic_cast<Oper *>(opers.top())->getPriority() >
                                                  curPriority) {
-        postfix.push_back(opers.top());
-        opers.pop();
+            postfix.push_back(opers.top());
+            opers.pop();
+        }
+    } else {
+        while (!opers.empty() && 
+            dynamic_cast<Oper *>(opers.top())->getPriority() >=
+                                                 curPriority) {
+            postfix.push_back(opers.top());
+            opers.pop();
+        }
     }
 }
 
@@ -174,8 +193,13 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
     vector<Lexem *> postfix;
     vector<Lexem *>::iterator it;
     stack <Lexem *> opers;
+    string varName;
     for (it = infix.begin(); it != infix.end(); it++) {
         if (dynamic_cast<Number *>(*it)) {
+            postfix.push_back(*it);
+        } else if (dynamic_cast<Variable *>(*it)) {
+            varName = dynamic_cast<Variable *>(*it)->getName();
+            vars[varName] = dynamic_cast<Variable *>(*it);
             postfix.push_back(*it);
         } else {
             switch (dynamic_cast<Oper *>(*it)->getType()) {
@@ -187,8 +211,7 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
                     buildBracketExpr(postfix, opers);
                     break;
                 default:
-                    sortOpers(postfix, opers,
-                        dynamic_cast<Oper *>(*it)->getPriority());
+                    sortOpers(postfix, opers, dynamic_cast<Oper *>(*it));
                     opers.push(*it);
                     break;
             }
