@@ -132,14 +132,16 @@ vector<Lexem *> parseLexem(string codeline) {
     int number = 0, prevSymIsDigit = 0, prevSymIsVar = 0;
     string var;
     for (it = codeline.begin(); it != codeline.end(); it++) {
-        if (*it == ' ' && *it == '\t') {
+        if (*it == ' ' || *it == '\t') {
             continue;
         } else if (isdigit(*it)) {
             number = number * 10 + *it - '0';
             prevSymIsDigit = 1;
+            prevSymIsVar = 0;
         } else if (isalpha(*it)) {
             var.push_back(*it);
             prevSymIsVar = 1;
+            prevSymIsDigit = 0;
         } else {
             if (prevSymIsDigit) {
                 infix.push_back(new Number(number));
@@ -258,28 +260,23 @@ void print(vector<Lexem *> v) {
     for (it = v.begin(); it != v.end(); it++) {
         if (dynamic_cast<Number *>(*it)) {
             cout << dynamic_cast<Number *>(*it)->getValue();
+        } else if (dynamic_cast<Variable *>(*it)) {
+            cout << dynamic_cast<Variable *>(*it)->getName();
         } else {
-            switch (dynamic_cast<Oper *>(*it)->getType()) {
-                case PLUS:
-                    cout << '+';
-                    break;
-                case MINUS:
-                    cout << '-';
-                    break;
-                case ASSIGN:
-                    cout << '=';
-                    break;
-                case MULTIPLY:
-                    cout << '*';
-                    break;
-                case LBRACKET:
-                    cout << '(';
-                    break;
-                case RBRACKET:
-                    cout << ')';
-                    break;
+            for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
+                if (dynamic_cast<Oper *>(*it)->getType() == OPERATOR(i)) {
+                    cout << OPERATOR_STRING[i];
+                }
             }
         }
+    }
+    cout << endl;
+}
+
+void printMap() {
+    map<string, Variable *>::iterator it;
+    for (it = vars.begin(); it != vars.end(); it++) {
+        cout << it->second->getName() << " ";
     }
     cout << endl;
 }
@@ -295,15 +292,17 @@ int main() {
     string codeline;
     vector<Lexem *> infix;
     vector<Lexem *> postfix;
-    int value;
+//    int value;
 
     while (getline(cin, codeline)) {
         infix = parseLexem(codeline);
         print(infix);
         postfix = buildPostfix(infix);
         print(postfix);
-        value = evaluatePostfix(postfix);
-        cout << value << endl;
+        clear(postfix);
+//        value = evaluatePostfix(postfix);
+//        cout << value << endl;
     }
+    printMap();
     return 0;
 }
