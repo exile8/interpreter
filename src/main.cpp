@@ -88,8 +88,8 @@ int Variable::getValue() const {
     return vars[name];
 }
 
-void setValue(int value) {
-    vars[names] = value;
+void Variable::setValue(int value) {
+    vars[name] = value;
 }
 
 Oper::Oper(OPERATOR opertype) {
@@ -101,12 +101,13 @@ OPERATOR Oper::getType() const {
 }
 
 int Oper::getPriority() const {
+    int priority;
     for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
         if (opertype == OPERATOR(i)) {
-            return PRIORITY[i];
+            priority = PRIORITY[i];
         }
     }
-    return -1;
+    return priority;
 }
 
 int Oper::getValue(int left, int right) const {
@@ -131,7 +132,7 @@ void appendOper(vector <Lexem *> & infix, char symbol) {
     }
 }
 
-vector<Lexem *> parseLexem(string codeline) {
+/*vector<Lexem *> parseLexem(string codeline) {
     vector<Lexem *> infix;
     string::iterator it;
     int number = 0, prevSymIsDigit = 0, prevSymIsVar = 0;
@@ -165,9 +166,56 @@ vector<Lexem *> parseLexem(string codeline) {
         infix.push_back(new Number(number));
     }
     return infix;
+}*/
+
+int readNumber(string::iterator & it, const string::iterator & end) {
+    int number = 0;
+    while (it != end && isdigit(*it)) {
+        number = number * 10 + *it - '0';
+        it++;
+    }
+    it--;
+    return number;
 }
 
-void buildBracketExpr(vector<Lexem *> & postfix, stack<Lexem *> & opers) {
+string readVariable(string::iterator & it, const string::iterator & end) {
+    string variable;
+    while (it != end && (isalpha(*it) || isdigit(*it) || *it == '_')) {
+        variable.push_back(*it);
+        it++;
+    }
+    it--;
+    return variable;
+}
+
+OPERATOR readOper(string::iterator & it) {
+    OPERATOR opertype;
+    for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
+        if (*it == OPERATOR_STRING[i]) {
+            opertype = OPERATOR(i);
+            break;
+        }
+    }
+    return opertype;
+}
+
+vector<Lexem *> parseLexem(string codeline) {
+    vector<Lexem *> infix;
+    string::iterator it;
+    for (it = codeline.begin(); it != codeline.end(); it++) {
+        if (*it == ' ' || *it == '\t') {
+            continue;
+        } else if (isdigit(*it)) {
+            infix.push_back(new Number(readNumber(it, codeline.end())));
+        } else if (isalpha(*it) || *it == '_') {
+            infix.push_back(new Variable(readVariable(it, codeline.end())));
+        } else {
+            infix.push_back(new Oper(readOper(it)));
+        }
+    }
+    return infix;
+}
+/*void buildBracketExpr(vector<Lexem *> & postfix, stack<Lexem *> & opers) {
     while (dynamic_cast<Oper *>(opers.top())->getType() != LBRACKET) {
         postfix.push_back(opers.top());
         opers.pop();
@@ -261,7 +309,7 @@ int evaluatePostfix(vector<Lexem *> postfix) {
     value = dynamic_cast<Number *>(eval.top())->getValue();
     delete eval.top();
     return value;
-}
+}*/
 
 void print(vector<Lexem *> v) {
     vector<Lexem *>::iterator it;
@@ -281,13 +329,13 @@ void print(vector<Lexem *> v) {
     cout << endl;
 }
 
-void printMap() {
+/*void printMap() {
     map<string, Variable *>::iterator it;
     for (it = vars.begin(); it != vars.end(); it++) {
         cout << it->second->getName() << " ";
     }
     cout << endl;
-}
+}*/
 
 void clear(vector<Lexem *> v) {
     vector<Lexem *>::iterator it;
@@ -299,17 +347,18 @@ void clear(vector<Lexem *> v) {
 int main() {
     string codeline;
     vector<Lexem *> infix;
-    vector<Lexem *> postfix;
-    int value;
+//    vector<Lexem *> postfix;
+//    int value;
 
     while (getline(cin, codeline)) {
         infix = parseLexem(codeline);
         print(infix);
-        postfix = buildPostfix(infix);
-        print(postfix);
-        value = evaluatePostfix(postfix);
-        cout << value << endl;
+        clear(infix);
+//        postfix = buildPostfix(infix);
+//        print(postfix);
+//        value = evaluatePostfix(postfix);
+//        cout << value << endl;
     }
-    printMap();
+//    printMap();
     return 0;
 }
