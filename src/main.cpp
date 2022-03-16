@@ -54,7 +54,7 @@ public:
     Variable(string name);
     string getName() const;
     int getValue() const;
-    void setValue(int value);
+    void setValue(int value) const;
 };
 
 map<string, int> vars;
@@ -66,6 +66,7 @@ public:
     OPERATOR getType() const;
     int getPriority() const;
     int getValue(int left, int right) const;
+    int getValue(const Variable & left, int right) const;
 };
 
 Number::Number(int value) {
@@ -88,7 +89,7 @@ int Variable::getValue() const {
     return vars[name];
 }
 
-void Variable::setValue(int value) {
+void Variable::setValue(int value) const {
     vars[name] = value;
 }
 
@@ -118,6 +119,23 @@ int Oper::getValue(int left, int right) const {
             return left - right;
         case MULTIPLY:
             return left * right;
+        default:
+            break;
+    }
+    return -1;
+}
+
+int Oper::getValue(const Variable & left, int right) const {
+    switch (opertype) {
+        case PLUS:
+            return left.getValue() + right;
+        case MINUS:
+            return left.getValue() - right;
+        case MULTIPLY:
+            return left.getValue() * right;
+        case ASSIGN:
+            left.setValue(right);
+            return left.getValue();
         default:
             break;
     }
@@ -237,22 +255,25 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
     return postfix;
 }
 
-/*Number *currentResult(stack <Lexem *> & eval, Oper *operation) {
-    Lexem *rightArg, *leftArg, *result;
-    rightArg = eval.top();
-    eval.pop();
-    if (operation->getType() == ASSIGN) {
-        Variable *leftArg = dynamic_cast<Variable *>(eval.top());
-        eval.pop();
-        if (dynamic_cast<Number *>(rightArg)) {
-            leftArg.setValue(dynamic_cast<Number *>(rightArg)->getValue());
-        } else {
-            leftArg.setValue(dynamic_cast<Variable *>(rightArg)->getValue());
-        }
+Number *currentResult(stack<Lexem *> & eval, Oper *operation) {
+    int rightArg;
+    Number *result;
+    if (dynamic_cast<Number *>(eval.top())) {
+        rightArg = dynamic_cast<Number *>(eval.top())->getValue();
+    } else {
+        rightArg = dynamic_cast<Variable *>(eval.top())->getValue();
     }
-    result = new Number(operation->getValue(*leftArg->getValue(), *rightArg->getValue));
-    delete leftArg;
-    delete rightArg;
+    delete eval.top();
+    eval.pop();
+    if (dynamic_cast<Number *>(eval.top())) {
+        int leftArg = dynamic_cast<Number *>(eval.top())->getValue();
+        result = new Number(operation->getValue(leftArg, rightArg));
+    } else {
+        Variable *left = dynamic_cast<Variable *>(eval.top());
+        result = new Number(operation->getValue(*left, rightArg));
+    }
+    delete eval.top();
+    eval.pop();
     delete operation;
     return result;
 }
@@ -271,7 +292,7 @@ int evaluatePostfix(vector<Lexem *> postfix) {
     value = dynamic_cast<Number *>(eval.top())->getValue();
     delete eval.top();
     return value;
-}*/
+}
 
 void print(vector<Lexem *> v) {
     vector<Lexem *>::iterator it;
@@ -291,13 +312,12 @@ void print(vector<Lexem *> v) {
     cout << endl;
 }
 
-/*void printMap() {
-    map<string, Variable *>::iterator it;
+void printMap() {
+    map<string, int>::iterator it;
     for (it = vars.begin(); it != vars.end(); it++) {
-        cout << it->second->getName() << " ";
+        cout << it->first << " = " << it->second << endl;
     }
-    cout << endl;
-}*/
+}
 
 void clear(vector<Lexem *> v) {
     vector<Lexem *>::iterator it;
@@ -310,17 +330,16 @@ int main() {
     string codeline;
     vector<Lexem *> infix;
     vector<Lexem *> postfix;
-//    int value;
+    int value;
 
     while (getline(cin, codeline)) {
         infix = parseLexem(codeline);
         print(infix);
         postfix = buildPostfix(infix);
         print(postfix);
-        clear(postfix);
-//        value = evaluatePostfix(postfix);
-//        cout << value << endl;
+        value = evaluatePostfix(postfix);
+        cout << value << endl;
     }
-//    printMap();
+    printMap();
     return 0;
 }
