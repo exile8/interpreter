@@ -53,10 +53,11 @@ class Variable : public Lexem {
 public:
     Variable(string name);
     string getName() const;
-    void setName(string name);
+    int getValue() const;
+    void setValue(int value);
 };
 
-map<string, Variable *> vars;
+map<string, int> vars;
 
 class Oper : public Lexem {
     OPERATOR opertype;
@@ -64,7 +65,7 @@ public:
     Oper(OPERATOR opertype);
     OPERATOR getType() const;
     int getPriority() const;
-    int getValue(const Number & left, const Number & right) const;
+    int getValue(int left, int right) const;
 };
 
 Number::Number(int value) {
@@ -76,15 +77,19 @@ int Number::getValue() const {
 }
 
 Variable::Variable(string name) {
-    setName(name);
+    Variable::name = name;
 }
 
 string Variable::getName() const {
     return name;
 }
 
-void Variable::setName(string name) {
-    Variable::name = name;
+int Variable::getValue() const {
+    return vars[name];
+}
+
+void setValue(int value) {
+    vars[names] = value;
 }
 
 Oper::Oper(OPERATOR opertype) {
@@ -104,14 +109,14 @@ int Oper::getPriority() const {
     return -1;
 }
 
-int Oper::getValue(const Number & left, const Number & right) const {
+int Oper::getValue(int left, int right) const {
     switch (opertype) {
         case PLUS:
-            return left.getValue() + right.getValue();
+            return left + right;
         case MINUS:
-            return left.getValue() - right.getValue();
+            return left - right;
         case MULTIPLY:
-            return left.getValue() * right.getValue();
+            return left * right;
         default:
             break;
     }
@@ -197,11 +202,7 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
     stack <Lexem *> opers;
     string varName;
     for (it = infix.begin(); it != infix.end(); it++) {
-        if (dynamic_cast<Number *>(*it)) {
-            postfix.push_back(*it);
-        } else if (dynamic_cast<Variable *>(*it)) {
-            varName = dynamic_cast<Variable *>(*it)->getName();
-            vars[varName] = dynamic_cast<Variable *>(*it);
+        if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
             postfix.push_back(*it);
         } else {
             switch (dynamic_cast<Oper *>(*it)->getType()) {
@@ -226,15 +227,22 @@ vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
     return postfix;
 }
 
-Number * currentResult(stack <Lexem *> & eval, Oper *operation) {
-    Number *rightArg, *leftArg, *result;
-    rightArg = dynamic_cast<Number *>(eval.top());
+Number *currentResult(stack <Lexem *> & eval, Oper *operation) {
+    Lexem *rightArg, *leftArg, *result;
+    rightArg = eval.top();
     eval.pop();
-    leftArg = dynamic_cast<Number *>(eval.top());
-    eval.pop();
-    result = new Number(operation->getValue(*leftArg, *rightArg));
-    delete rightArg;
+    if (operation->getType() == ASSIGN) {
+        Variable *leftArg = dynamic_cast<Variable *>(eval.top());
+        eval.pop();
+        if (dynamic_cast<Number *>(rightArg)) {
+            leftArg.setValue(dynamic_cast<Number *>(rightArg)->getValue());
+        } else {
+            leftArg.setValue(dynamic_cast<Variable *>(rightArg)->getValue());
+        }
+    }
+    result = new Number(operation->getValue(*leftArg->getValue(), *rightArg->getValue));
     delete leftArg;
+    delete rightArg;
     delete operation;
     return result;
 }
@@ -244,7 +252,7 @@ int evaluatePostfix(vector<Lexem *> postfix) {
     stack<Lexem *> eval;
     vector<Lexem *>::iterator it;
     for (it = postfix.begin(); it != postfix.end(); it++) {
-        if (dynamic_cast<Number *>(*it)) {
+        if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
             eval.push(*it);
         } else {
             eval.push(currentResult(eval, dynamic_cast<Oper *>(*it)));
@@ -292,16 +300,15 @@ int main() {
     string codeline;
     vector<Lexem *> infix;
     vector<Lexem *> postfix;
-//    int value;
+    int value;
 
     while (getline(cin, codeline)) {
         infix = parseLexem(codeline);
         print(infix);
         postfix = buildPostfix(infix);
         print(postfix);
-        clear(postfix);
-//        value = evaluatePostfix(postfix);
-//        cout << value << endl;
+        value = evaluatePostfix(postfix);
+        cout << value << endl;
     }
     printMap();
     return 0;
