@@ -16,23 +16,53 @@ using std::map;
 
 enum OPERATOR {
     LBRACKET, RBRACKET,
-    ASSIGN,
+    OR,
+    AND,
+    BITOR,
+    XOR,
+    BITAND,
+    EQ, ASSIGN,
+    NEQ,
+    LEQ, SHL,
+    LT,
+    GEQ, SHR,
+    GT,
     PLUS, MINUS,
-    MULTIPLY
+    MULT, DIV, MOD
 };
 
-char OPERATOR_STRING[] = {
-    '(', ')',
-    '=',
-    '+', '-',
-    '*'
+string OPERATOR_STRING[] = {
+    "(", ")",
+    "||",
+    "&&",
+    "|",
+    "^",
+    "&",
+    "==", "=",
+    "!=",
+    "<=", "<<",
+    "<",
+    ">=", ">>",
+    ">",
+    "+", "-",
+    "*", "/", "%"
 };
 
 int PRIORITY[] = {
     -1, -1,
-    0,
-    1, 1,
-    2
+    1,
+    2,
+    3,
+    4,
+    5,
+    6, 0,
+    6,
+    7, 8,
+    7,
+    7, 8,
+    7,
+    9, 9,
+    10, 10, 10
 };
 
 class Lexem {
@@ -103,7 +133,8 @@ OPERATOR Oper::getType() const {
 
 int Oper::getPriority() const {
     int priority;
-    for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
+    size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
+    for (size_t i = 0; i < n; i++) {
         if (opertype == OPERATOR(i)) {
             priority = PRIORITY[i];
         }
@@ -113,12 +144,42 @@ int Oper::getPriority() const {
 
 int Oper::getValue(int left, int right) const {
     switch (opertype) {
+        case OR:
+            return left || right;
+        case AND:
+            return left && right;
+        case BITOR:
+            return left | right;
+        case XOR:
+            return left ^ right;
+        case BITAND:
+            return left & right;
+        case EQ:
+            return left == right;
+        case NEQ:
+            return left != right;
+        case LEQ:
+            return left <= right;
+        case SHL:
+            return left << right;
+        case LT:
+            return left < right;
+        case GEQ:
+            return left >= right;
+        case SHR:
+            return left >> right;
+        case GT:
+            return left > right;
         case PLUS:
             return left + right;
         case MINUS:
             return left - right;
-        case MULTIPLY:
+        case MULT:
             return left * right;
+        case DIV:
+            return left / right;
+        case MOD:
+            return left % right;
         default:
             break;
     }
@@ -127,12 +188,42 @@ int Oper::getValue(int left, int right) const {
 
 int Oper::getValue(const Variable & left, int right) const {
     switch (opertype) {
+        case OR:
+            return left.getValue() || right;
+        case AND:
+            return left.getValue()  && right;
+        case BITOR:
+            return left.getValue() | right;
+        case XOR:
+            return left.getValue() ^ right;
+        case BITAND:
+            return left.getValue() & right;
+        case EQ:
+            return left.getValue() == right;
+        case NEQ:
+            return left.getValue() != right;
+        case LEQ:
+            return left.getValue() <= right;
+        case SHL:
+            return left.getValue() << right;
+        case LT:
+            return left.getValue() < right;
+        case GEQ:
+            return left.getValue() >= right;
+        case SHR:
+            return left.getValue() >> right;
+        case GT:
+            return left.getValue() > right;
         case PLUS:
             return left.getValue() + right;
         case MINUS:
             return left.getValue() - right;
-        case MULTIPLY:
+        case MULT:
             return left.getValue() * right;
+        case DIV:
+            return left.getValue() / right;
+        case MOD:
+            return left.getValue() % right;
         case ASSIGN:
             left.setValue(right);
             return left.getValue();
@@ -162,11 +253,22 @@ string readVariable(string::iterator & it, const string::iterator & end) {
     return variable;
 }
 
-OPERATOR readOper(string::iterator & it) {
+string getSubstring(string::iterator & it, size_t size, const string::iterator & end) {
+    string substring;
+    for (size_t i = 0; i < size && (it + i) != end; i++) {
+        substring.push_back(*(it + i));
+    }
+    return substring;
+}
+
+OPERATOR readOper(string::iterator & it, const string::iterator & end) {
     OPERATOR opertype;
-    for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
-        if (*it == OPERATOR_STRING[i]) {
+    size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
+    for (size_t i = 0; i < n; i++) {
+        string subCodeline = getSubstring(it, OPERATOR_STRING[i].size(), end);
+        if (subCodeline.compare(OPERATOR_STRING[i]) == 0) {
             opertype = OPERATOR(i);
+            it += OPERATOR_STRING[i].size() - 1;
             break;
         }
     }
@@ -184,7 +286,7 @@ vector<Lexem *> parseLexem(string codeline) {
         } else if (isalpha(*it) || *it == '_') {
             infix.push_back(new Variable(readVariable(it, codeline.end())));
         } else {
-            infix.push_back(new Oper(readOper(it)));
+            infix.push_back(new Oper(readOper(it, codeline.end())));
         }
     }
     return infix;
@@ -296,13 +398,14 @@ int evaluatePostfix(vector<Lexem *> postfix) {
 
 void print(vector<Lexem *> v) {
     vector<Lexem *>::iterator it;
+    size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
     for (it = v.begin(); it != v.end(); it++) {
         if (dynamic_cast<Number *>(*it)) {
             cout << dynamic_cast<Number *>(*it)->getValue();
         } else if (dynamic_cast<Variable *>(*it)) {
             cout << dynamic_cast<Variable *>(*it)->getName();
         } else {
-            for (size_t i = 0; i < sizeof(OPERATOR_STRING); i++) {
+            for (size_t i = 0; i < n; i++) {
                 if (dynamic_cast<Oper *>(*it)->getType() == OPERATOR(i)) {
                     cout << OPERATOR_STRING[i];
                 }
@@ -314,9 +417,11 @@ void print(vector<Lexem *> v) {
 
 void printMap() {
     map<string, int>::iterator it;
+    cout << "--------Variables--------" << endl;
     for (it = vars.begin(); it != vars.end(); it++) {
         cout << it->first << " = " << it->second << endl;
     }
+    cout << "-------------------------" << endl;
 }
 
 void clear(vector<Lexem *> v) {
@@ -339,7 +444,7 @@ int main() {
         print(postfix);
         value = evaluatePostfix(postfix);
         cout << value << endl;
+        printMap();
     }
-    printMap();
     return 0;
 }
