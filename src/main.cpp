@@ -13,6 +13,7 @@ using std::string;
 using std::vector;
 using std::stack;
 using std::map;
+using std::cerr;
 
 enum OPERATOR {
     LBRACKET, RBRACKET,
@@ -38,7 +39,7 @@ string OPERATOR_STRING[] = {
     "|",
     "^",
     "&",
-    "==", "=",
+    "==", ":=",
     "!=",
     "<=", "<<",
     "<",
@@ -95,9 +96,249 @@ public:
     Oper(OPERATOR opertype);
     OPERATOR getType() const;
     int getPriority() const;
+};
+
+class Binary : public Oper {
+public:
+    Binary(OPERATOR opertype) : Oper(opertype) {}
     int getValue(int left, int right) const;
+};
+
+class Assign : public Oper {
+public:
+    Assign() : Oper(ASSIGN) {}
     int getValue(const Variable & left, int right) const;
 };
+
+class Parser {
+    string codeline;
+    size_t position;
+    stack<Oper *> opers;
+    string subcodeline(size_t n);
+    void shift(size_t n);
+    int openBrackets;
+
+    bool getCommand();
+    bool getExpression();
+    bool getNumber();
+    bool getVariable();
+    bool getAssignOperator();
+    bool getBinaryOperator();
+    bool getLeftBracket();
+    bool getRightBracket();
+
+    void buildBracketExpr();
+    void sortOpersRight(Oper *op);
+    void sortOpersLeft(Oper *op);
+    void putOperInPoliz(Oper *op);
+    void freeStack();
+    void clear();
+public:
+    vector<Lexem *> poliz;
+    bool buildPoliz(string codeline);
+};
+
+string Parser::subcodeline(size_t n) {
+    string str;
+    for (size_t i = 0; i < n; i++) {
+        str.push_back(codeline[position + i]);
+    }
+    return str;
+}
+
+void Parser::shift(size_t n) {
+    position += n;
+}
+
+void Parser::buildBracketExpr() {
+    while (opers.top()->getType() != LBRACKET) {
+        poliz.push_back(opers.top());
+        opers.pop();
+    }
+    delete opers.top();
+    opers.pop();
+}
+
+void Parser::sortOpersRight(Oper *op) {
+    int curPriority = op->getPriority();
+    while (!opers.empty() && opers.top()->getPriority() > curPriority) {
+        poliz.push_back(opers.top());
+        opers.pop();
+    }
+    opers.push(op);
+}
+
+void Parser::sortOpersLeft(Oper *op) {
+    int curPriority = op->getPriority();
+    while (!opers.empty() && opers.top()->getPriority() >= curPriority) {
+        poliz.push_back(opers.top());
+        opers.pop();
+    }
+    opers.push(op);
+}
+
+void Parser::putOperInPoliz(Oper *op) {
+    if (dynamic_cast<Assign *>(op)) {
+        sortOpersRight(op);
+    } else {
+        switch (dynamic_cast<Binary *>(op)->getType()) {
+            case LBRACKET:
+                opers.push(op);
+                break;
+            case RBRACKET:
+                delete op;
+                buildBracketExpr();
+                break;
+            default:
+                sortOpersLeft(op);
+                break;
+        }
+    }
+}
+
+void Parser::freeStack() {
+    while (!opers.empty()) {
+        poliz.push_back(opers.top());
+        opers.pop();
+    }
+}
+
+void Parser::clear() {
+    freeStack();
+    for (size_t i = 0; i < poliz.size(); i++) {
+        delete poliz[i];
+    }
+    poliz.clear();
+}
+
+bool Parser::getNumber() {
+    while (getLeftBracket()) {
+        openBrackets++;
+    }
+    int number = codeline[position] - '0';
+    if (isdigit(codeline[position])) {
+        shift(1);
+    } else {
+        return false;
+    }
+    while (isdigit(codeline[position])) {
+        number = number * 10 + codeline[position] - '0';
+        shift(1);
+    }
+    poliz.push_back(new Number(number));
+    while (getRightBracket()) {
+        openBrackets--;
+    }
+    return true;
+}
+
+bool Parser::getVariable() {
+    while (getLeftBracket()) {
+        openBrackets++;
+    }
+    string name(1, codeline[position]);
+    if (isalpha(codeline[position]) || codeline[position] == '_') {
+        shift(1);
+    } else {
+        return false;
+    }
+    while (isalpha(codeline[position]) || isdigit(codeline[position]) ||
+           codeline[position] == '_') {
+        name.push_back(codeline[position]);
+        shift(1);
+    }
+    poliz.push_back(new Variable(name));
+    while (getRightBracket()) {
+        openBrackets--;
+    }
+    return true;
+}
+
+bool Parser::getAssignOperator() {
+    string op = subcodeline(2);
+    if (op.compare(":=") == 0) {
+        shift(2);
+        putOperInPoliz(new Assign());
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getLeftBracket() {
+    if (codeline[position] == '(') {
+        putOperInPoliz(new Binary(LBRACKET));
+        shift(1);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getRightBracket() {
+    if (codeline[position] == ')') {
+        putOperInPoliz(new Binary(RBRACKET));
+        shift(1);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getBinaryOperator() {
+    size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
+    for (size_t i = 0; i < n; i++) {
+        string op = subcodeline(OPERATOR_STRING[i].size());
+        if (op.compare(OPERATOR_STRING[i]) == 0) {
+            putOperInPoliz(new Binary(OPERATOR(i)));
+            shift(OPERATOR_STRING[i].size());
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Parser::getExpression() {
+    if (getNumber()) {
+        if (position == codeline.size()) {
+            return true;
+        } else if (getAssignOperator()) {
+            return false;
+        } else {
+            return getBinaryOperator() && getExpression();
+        }
+    } else if (getVariable()) {
+        if (position == codeline.size()) {
+            return true;
+        } else if (getAssignOperator() || getBinaryOperator()) {
+            return getExpression();
+        }
+    }
+    return false;
+}
+
+bool Parser::getCommand() {
+    if (getExpression() && openBrackets == 0) {
+        freeStack();
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::buildPoliz(string codeline) {
+    Parser::codeline = codeline;
+    position = 0;
+    openBrackets = 0;
+    poliz.clear();
+    if (getCommand()) {
+        return true;
+    } else {
+        clear();
+        cerr << "Error: wrong syntax" << endl;
+        return false;
+    }
+}
 
 Number::Number(int value) {
     Number::value = value;
@@ -142,8 +383,8 @@ int Oper::getPriority() const {
     return priority;
 }
 
-int Oper::getValue(int left, int right) const {
-    switch (opertype) {
+int Binary::getValue(int left, int right) const {
+    switch (getType()) {
         case OR:
             return left || right;
         case AND:
@@ -181,183 +422,24 @@ int Oper::getValue(int left, int right) const {
         case MOD:
             return left % right;
         default:
+            cerr << "Error: invalid operation" << endl;
             break;
     }
     return -1;
 }
 
-int Oper::getValue(const Variable & left, int right) const {
-    switch (opertype) {
-        case OR:
-            return left.getValue() || right;
-        case AND:
-            return left.getValue()  && right;
-        case BITOR:
-            return left.getValue() | right;
-        case XOR:
-            return left.getValue() ^ right;
-        case BITAND:
-            return left.getValue() & right;
-        case EQ:
-            return left.getValue() == right;
-        case NEQ:
-            return left.getValue() != right;
-        case LEQ:
-            return left.getValue() <= right;
-        case SHL:
-            return left.getValue() << right;
-        case LT:
-            return left.getValue() < right;
-        case GEQ:
-            return left.getValue() >= right;
-        case SHR:
-            return left.getValue() >> right;
-        case GT:
-            return left.getValue() > right;
-        case PLUS:
-            return left.getValue() + right;
-        case MINUS:
-            return left.getValue() - right;
-        case MULT:
-            return left.getValue() * right;
-        case DIV:
-            return left.getValue() / right;
-        case MOD:
-            return left.getValue() % right;
-        case ASSIGN:
-            left.setValue(right);
-            return left.getValue();
-        default:
-            break;
-    }
-    return -1;
-}
-
-int readNumber(string::iterator & it, const string::iterator & end) {
-    int number = 0;
-    while (it != end && isdigit(*it)) {
-        number = number * 10 + *it - '0';
-        it++;
-    }
-    it--;
-    return number;
-}
-
-string readVariable(string::iterator & it, const string::iterator & end) {
-    string variable;
-    while (it != end && (isalpha(*it) || isdigit(*it) || *it == '_')) {
-        variable.push_back(*it);
-        it++;
-    }
-    it--;
-    return variable;
-}
-
-string getSubstring(string::iterator & it, size_t size, const string::iterator & end) {
-    string substring;
-    for (size_t i = 0; i < size && (it + i) != end; i++) {
-        substring.push_back(*(it + i));
-    }
-    return substring;
-}
-
-OPERATOR readOper(string::iterator & it, const string::iterator & end) {
-    OPERATOR opertype;
-    size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
-    for (size_t i = 0; i < n; i++) {
-        string subCodeline = getSubstring(it, OPERATOR_STRING[i].size(), end);
-        if (subCodeline.compare(OPERATOR_STRING[i]) == 0) {
-            opertype = OPERATOR(i);
-            it += OPERATOR_STRING[i].size() - 1;
-            break;
-        }
-    }
-    return opertype;
-}
-
-vector<Lexem *> parseLexem(string codeline) {
-    vector<Lexem *> infix;
-    string::iterator it;
-    for (it = codeline.begin(); it != codeline.end(); it++) {
-        if (*it == ' ' || *it == '\t') {
-            continue;
-        } else if (isdigit(*it)) {
-            infix.push_back(new Number(readNumber(it, codeline.end())));
-        } else if (isalpha(*it) || *it == '_') {
-            infix.push_back(new Variable(readVariable(it, codeline.end())));
-        } else {
-            infix.push_back(new Oper(readOper(it, codeline.end())));
-        }
-    }
-    return infix;
-}
-
-void buildBracketExpr(vector<Lexem *> & postfix, stack<Lexem *> & opers) {
-    while (dynamic_cast<Oper *>(opers.top())->getType() != LBRACKET) {
-        postfix.push_back(opers.top());
-        opers.pop();
-    }
-    delete opers.top();
-    opers.pop();
-}
-
-void sortOpersRight(vector<Lexem *> & postfix, stack<Lexem *> & opers, Lexem *operation) {
-    int curPriority = dynamic_cast<Oper *>(operation)->getPriority();
-    while (!opers.empty() &&
-                dynamic_cast<Oper *>(opers.top())->getPriority() > curPriority) {
-        postfix.push_back(opers.top());
-        opers.pop();
-    }
-    opers.push(operation);
-}
-
-void sortOpersLeft(vector<Lexem *> & postfix, stack<Lexem *> & opers, Lexem *operation) {
-    int curPriority = dynamic_cast<Oper *>(operation)->getPriority();
-    while (!opers.empty() &&
-                dynamic_cast<Oper *>(opers.top())->getPriority() >= curPriority) {
-        postfix.push_back(opers.top());
-        opers.pop();
-    }
-    opers.push(operation);
-}
-
-void putOpersInPostfix(vector<Lexem *> & postfix, stack<Lexem *> & opers, Lexem * operation) {
-    switch (dynamic_cast<Oper *>(operation)->getType()) {
-        case LBRACKET:
-            opers.push(operation);
-            break;
-        case RBRACKET:
-            delete operation;
-            buildBracketExpr(postfix, opers);
-            break;
-        case ASSIGN:
-            sortOpersRight(postfix, opers, operation);
-            break;
-        default:
-            sortOpersLeft(postfix, opers, operation);
-            break;
+int Assign::getValue(const Variable & left, int right) const {
+    if (getType() == ASSIGN) {
+        left.setValue(right);
+        return right;
+    } else {
+        cerr << "Error: invalid operation" << endl;
+        return -1;
     }
 }
 
-vector<Lexem *> buildPostfix(vector<Lexem *> infix) {
-    vector<Lexem *> postfix;
-    vector<Lexem *>::iterator it;
-    stack <Lexem *> opers;
-    for (it = infix.begin(); it != infix.end(); it++) {
-        if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
-            postfix.push_back(*it);
-        } else {
-            putOpersInPostfix(postfix, opers, *it);
-        }
-    }
-    while (!opers.empty()) {
-        postfix.push_back(opers.top());
-        opers.pop();
-    }
-    return postfix;
-}
 
-Number *currentResult(stack<Lexem *> & eval, Oper *operation) {
+Number *currentResult(stack<Lexem *> & eval, Binary *binary, Assign *assign) {
     int rightArg;
     Number *result;
     if (dynamic_cast<Number *>(eval.top())) {
@@ -367,16 +449,21 @@ Number *currentResult(stack<Lexem *> & eval, Oper *operation) {
     }
     delete eval.top();
     eval.pop();
-    if (dynamic_cast<Number *>(eval.top())) {
-        int leftArg = dynamic_cast<Number *>(eval.top())->getValue();
-        result = new Number(operation->getValue(leftArg, rightArg));
-    } else {
+    if (assign != nullptr) {
         Variable *left = dynamic_cast<Variable *>(eval.top());
-        result = new Number(operation->getValue(*left, rightArg));
+        result = new Number(assign->getValue(*left, rightArg));
+        delete assign;
+    } else if (dynamic_cast<Number *>(eval.top())) {
+        int leftNum = dynamic_cast<Number *>(eval.top())->getValue();
+        result = new Number(binary->getValue(leftNum, rightArg));
+        delete binary;
+    } else {
+        int leftVar = dynamic_cast<Variable *>(eval.top())->getValue();
+        result = new Number(binary->getValue(leftVar, rightArg));
+        delete binary;
     }
     delete eval.top();
     eval.pop();
-    delete operation;
     return result;
 }
 
@@ -388,7 +475,8 @@ int evaluatePostfix(vector<Lexem *> postfix) {
         if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
             eval.push(*it);
         } else {
-            eval.push(currentResult(eval, dynamic_cast<Oper *>(*it)));
+            eval.push(currentResult(eval, dynamic_cast<Binary *>(*it),
+                                        dynamic_cast<Assign *>(*it)));
         }
     }
     value = dynamic_cast<Number *>(eval.top())->getValue();
@@ -424,27 +512,17 @@ void printMap() {
     cout << "-------------------------" << endl;
 }
 
-void clear(vector<Lexem *> v) {
-    vector<Lexem *>::iterator it;
-    for (it = v.begin(); it != v.end(); it++) {
-        delete (*it);
-    }
-}
-
 int main() {
+    Parser parser;
     string codeline;
-    vector<Lexem *> infix;
-    vector<Lexem *> postfix;
     int value;
-
     while (getline(cin, codeline)) {
-        infix = parseLexem(codeline);
-        print(infix);
-        postfix = buildPostfix(infix);
-        print(postfix);
-        value = evaluatePostfix(postfix);
-        cout << value << endl;
-        printMap();
+        if (parser.buildPoliz(codeline)) {
+            print(parser.poliz);
+            value = evaluatePostfix(parser.poliz);
+            cout << value << endl;
+            printMap();
+        }
     }
     return 0;
 }
