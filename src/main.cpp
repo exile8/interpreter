@@ -16,13 +16,14 @@ using std::map;
 using std::cerr;
 
 enum OPERATOR {
+    GOTO, ASSIGN, COLON,
     LBRACKET, RBRACKET,
     OR,
     AND,
     BITOR,
     XOR,
     BITAND,
-    EQ, ASSIGN,
+    EQ,
     NEQ,
     LEQ, SHL,
     LT,
@@ -33,13 +34,14 @@ enum OPERATOR {
 };
 
 string OPERATOR_STRING[] = {
+    "goto", ":=", ":",
     "(", ")",
     "||",
     "&&",
     "|",
     "^",
     "&",
-    "==", ":=",
+    "==",
     "!=",
     "<=", "<<",
     "<",
@@ -50,13 +52,14 @@ string OPERATOR_STRING[] = {
 };
 
 int PRIORITY[] = {
+    -1, 0, -1,
     -1, -1,
     1,
     2,
     3,
     4,
     5,
-    6, 0,
+    6,
     6,
     7, 8,
     7,
@@ -71,6 +74,8 @@ public:
     Lexem() {}
     virtual ~Lexem() {}
 };
+
+void print(vector<Lexem *> v);
 
 class Number : public Lexem {
     int value;
@@ -89,6 +94,7 @@ public:
 };
 
 map<string, int> vars;
+map<string, int> labels;
 
 class Oper : public Lexem {
     OPERATOR opertype;
@@ -113,16 +119,19 @@ public:
 class Parser {
     string codeline;
     size_t position;
-    stack<Oper *> opers;
     string subcodeline(size_t n);
     void shift(size_t n);
-    int openBrackets;
+    void skipSpaces();
+
+    stack<Oper *> opers;
+    vector<Lexem *> polizline;
 
     bool getCommand();
     bool getExpression();
     bool getNumber();
     bool getVariable();
     bool getAssignOperator();
+    bool getColon();
     bool getBinaryOperator();
     bool getLeftBracket();
     bool getRightBracket();
@@ -133,9 +142,11 @@ class Parser {
     void putOperInPoliz(Oper *op);
     void freeStack();
     void clear();
+
+    bool buildPolizline(string codeline);
 public:
-    vector<Lexem *> poliz;
-    bool buildPoliz(string codeline);
+    vector<vector<Lexem *>> poliz;
+    bool buildPoliz(vector<string> code);
 };
 
 string Parser::subcodeline(size_t n) {
@@ -150,9 +161,15 @@ void Parser::shift(size_t n) {
     position += n;
 }
 
+void Parser::skipSpaces() {
+    while (codeline[position] == ' ' || codeline[position] == '\t') {
+        position++;
+    }
+}
+
 void Parser::buildBracketExpr() {
     while (opers.top()->getType() != LBRACKET) {
-        poliz.push_back(opers.top());
+        polizline.push_back(opers.top());
         opers.pop();
     }
     delete opers.top();
@@ -162,7 +179,7 @@ void Parser::buildBracketExpr() {
 void Parser::sortOpersRight(Oper *op) {
     int curPriority = op->getPriority();
     while (!opers.empty() && opers.top()->getPriority() > curPriority) {
-        poliz.push_back(opers.top());
+        polizline.push_back(opers.top());
         opers.pop();
     }
     opers.push(op);
@@ -171,7 +188,7 @@ void Parser::sortOpersRight(Oper *op) {
 void Parser::sortOpersLeft(Oper *op) {
     int curPriority = op->getPriority();
     while (!opers.empty() && opers.top()->getPriority() >= curPriority) {
-        poliz.push_back(opers.top());
+        polizline.push_back(opers.top());
         opers.pop();
     }
     opers.push(op);
@@ -198,23 +215,29 @@ void Parser::putOperInPoliz(Oper *op) {
 
 void Parser::freeStack() {
     while (!opers.empty()) {
-        poliz.push_back(opers.top());
+        polizline.push_back(opers.top());
         opers.pop();
     }
 }
 
 void Parser::clear() {
     freeStack();
+    print(polizline);
     for (size_t i = 0; i < poliz.size(); i++) {
-        delete poliz[i];
+        for (size_t j = 0; j < poliz[i].size(); j++) {
+            delete poliz[i][j];
+        }
+        poliz[i].clear();
     }
+    for (size_t i = 0; i < polizline.size(); i++) {
+        delete polizline[i];
+    }
+    polizline.clear();
     poliz.clear();
 }
 
 bool Parser::getNumber() {
-    while (getLeftBracket()) {
-        openBrackets++;
-    }
+    skipSpaces();
     int number = codeline[position] - '0';
     if (isdigit(codeline[position])) {
         shift(1);
@@ -225,17 +248,12 @@ bool Parser::getNumber() {
         number = number * 10 + codeline[position] - '0';
         shift(1);
     }
-    poliz.push_back(new Number(number));
-    while (getRightBracket()) {
-        openBrackets--;
-    }
+    polizline.push_back(new Number(number));
     return true;
 }
 
 bool Parser::getVariable() {
-    while (getLeftBracket()) {
-        openBrackets++;
-    }
+    skipSpaces();
     string name(1, codeline[position]);
     if (isalpha(codeline[position]) || codeline[position] == '_') {
         shift(1);
@@ -247,14 +265,12 @@ bool Parser::getVariable() {
         name.push_back(codeline[position]);
         shift(1);
     }
-    poliz.push_back(new Variable(name));
-    while (getRightBracket()) {
-        openBrackets--;
-    }
+    polizline.push_back(new Variable(name));
     return true;
 }
 
 bool Parser::getAssignOperator() {
+    skipSpaces();
     string op = subcodeline(2);
     if (op.compare(":=") == 0) {
         shift(2);
@@ -265,7 +281,15 @@ bool Parser::getAssignOperator() {
     }
 }
 
+/*bool Parser::getColon() {
+    skipSpaces();
+    if (codeline[position] == ':') {
+        putOperInPoliz(new Colon());
+    }
+}*/
+
 bool Parser::getLeftBracket() {
+    skipSpaces();
     if (codeline[position] == '(') {
         putOperInPoliz(new Binary(LBRACKET));
         shift(1);
@@ -276,6 +300,7 @@ bool Parser::getLeftBracket() {
 }
 
 bool Parser::getRightBracket() {
+    skipSpaces();
     if (codeline[position] == ')') {
         putOperInPoliz(new Binary(RBRACKET));
         shift(1);
@@ -287,7 +312,11 @@ bool Parser::getRightBracket() {
 
 bool Parser::getBinaryOperator() {
     size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
+    skipSpaces();
     for (size_t i = 0; i < n; i++) {
+        if (PRIORITY[i] < 0) {
+            continue;
+        }
         string op = subcodeline(OPERATOR_STRING[i].size());
         if (op.compare(OPERATOR_STRING[i]) == 0) {
             putOperInPoliz(new Binary(OPERATOR(i)));
@@ -300,25 +329,35 @@ bool Parser::getBinaryOperator() {
 
 bool Parser::getExpression() {
     if (getNumber()) {
-        if (position == codeline.size()) {
-            return true;
-        } else if (getAssignOperator()) {
+        if (getAssignOperator() || getLeftBracket()) {
             return false;
+        } else if (getBinaryOperator()) {
+            return getExpression();
         } else {
-            return getBinaryOperator() && getExpression();
+            return true;
         }
     } else if (getVariable()) {
-        if (position == codeline.size()) {
-            return true;
+        if (getLeftBracket()) {
+            return false;
         } else if (getAssignOperator() || getBinaryOperator()) {
             return getExpression();
+        } else {
+            return true;
+        }
+    } else if (getLeftBracket() && getExpression() && getRightBracket()) {
+        if (getAssignOperator() || getLeftBracket()) {
+            return false;
+        } else if (getBinaryOperator()) {
+            return getExpression();
+        } else {
+            return true;
         }
     }
     return false;
 }
 
 bool Parser::getCommand() {
-    if (getExpression() && openBrackets == 0) {
+    if (getExpression() && (position == codeline.size())) {
         freeStack();
         return true;
     } else {
@@ -326,18 +365,29 @@ bool Parser::getCommand() {
     }
 }
 
-bool Parser::buildPoliz(string codeline) {
+bool Parser::buildPolizline(string codeline) {
     Parser::codeline = codeline;
+    polizline.clear();
     position = 0;
-    openBrackets = 0;
-    poliz.clear();
     if (getCommand()) {
+        print(polizline);
         return true;
     } else {
         clear();
-        cerr << "Error: wrong syntax" << endl;
         return false;
     }
+}
+
+bool Parser::buildPoliz(vector<string> code) {
+    for (size_t i = 0; i < code.size(); i++) {
+        if (buildPolizline(code[i]) == false) {
+            cout << i << "!!!" << endl;
+            cerr << "Error: wrong syntax" << endl;
+            return false;
+        }
+        poliz.push_back(polizline);
+    }
+    return true;
 }
 
 Number::Number(int value) {
@@ -514,12 +564,16 @@ void printMap() {
 
 int main() {
     Parser parser;
+    vector<string> code;
     string codeline;
     int value;
     while (getline(cin, codeline)) {
-        if (parser.buildPoliz(codeline)) {
-            print(parser.poliz);
-            value = evaluatePostfix(parser.poliz);
+        code.push_back(codeline);
+    }
+
+    if (parser.buildPoliz(code)) {
+        for (size_t i = 0; i < code.size(); i++) {
+            value = evaluatePostfix(parser.poliz[i]);
             cout << value << endl;
             printMap();
         }
