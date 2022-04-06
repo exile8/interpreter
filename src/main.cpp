@@ -718,7 +718,7 @@ Number *currentResult(stack<Lexem *> & eval, Binary *binary, Assign *assign) {
     return result;
 }
 
-bool getCondValue(Lexem *condition) {
+bool getCondition(Lexem *condition) {
     Variable *var = dynamic_cast<Variable *>(condition);
     Number *num = dynamic_cast<Number *>(condition);
     if (var) {
@@ -727,23 +727,27 @@ bool getCondValue(Lexem *condition) {
     return !(num->getValue() == 0);
 }
 
-int jump(Goto *op, Lexem *condition, size_t row) {
+int jump(Goto *op, stack<Lexem *> & eval, size_t row) {
     OPERATOR type = op->getType();
-    bool condValue = getCondValue(condition);
+    bool condition = false;
+    if (type == GOTO) {
+        return op->getValue(*(dynamic_cast<Variable *>(eval.top())));
+    }
+    if (eval.empty() == false) {
+        condition = getCondition(eval.top());
+    }
     if (type == IF || type == WHILE) {
-        if (condValue == false) {
+        if (condition == false) {
             return op->getRow();
         } else {
             return row + 1;
         }
-    } else if (type == ENDWHILE) {
-        return op->getRow();
     }
-    return op->getValue(*(dynamic_cast<Variable *>(condition)));
+    return op->getRow();
 }
 
 int evaluatePostfix(vector<Lexem *> postfix, size_t row) {
-    int value;
+    int value, nextRow = row + 1;
     stack<Lexem *> eval;
     vector<Lexem *>::iterator it;
     vector<Number *> intermediate;
@@ -753,20 +757,22 @@ int evaluatePostfix(vector<Lexem *> postfix, size_t row) {
         } else if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
             eval.push(*it);
         } else if (dynamic_cast<Goto *>(*it)) {
-            return jump(dynamic_cast<Goto *>(*it), eval.top(), row);
+            nextRow = jump(dynamic_cast<Goto *>(*it), eval, row);
         } else {
             intermediate.push_back(currentResult(eval, dynamic_cast<Binary *>(*it),
                                         dynamic_cast<Assign *>(*it)));
             eval.push(intermediate.back());
         }
     }
-    value = dynamic_cast<Number *>(eval.top())->getValue();
-    cout << value << endl;
-    for (size_t i = 0; i < intermediate.size() - 1; i++) {
+    if (eval.empty() == false && dynamic_cast<Number *>(eval.top())) {
+        value = dynamic_cast<Number *>(eval.top())->getValue();
+        cout << value << endl;
+        delete eval.top();
+    }
+    for (ssize_t i = 0; i < (ssize_t)intermediate.size() - 1; i++) {
         delete intermediate[i];
     }
-    delete eval.top();
-    return row + 1;
+    return nextRow;
 }
 
 void print(vector<Lexem *> v) {
