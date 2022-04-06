@@ -166,19 +166,30 @@ class Parser {
     void skipSpaces();
 
     stack<Oper *> opers;
+    stack<Goto *> stackIf;
+    stack<Goto *> stackWhile;
     vector<Lexem *> polizline;
 
     bool getCommand();
     bool getExpression();
+
     bool getNumber();
     bool getVariable();
+
     bool getAssignOperator();
     bool getBinaryOperator();
     bool getLeftBracket();
     bool getRightBracket();
+
     bool getColon();
     bool initLabel();
     bool getGoto();
+    bool getIf();
+    bool getElse();
+    bool getThen();
+    bool getEndif();
+    bool getWhile();
+    bool getEndwhile();
 
     void buildBracketExpr();
     void sortOpersRight(Oper *op);
@@ -268,6 +279,14 @@ void Parser::freeStack() {
 void Parser::clear() {
     freeStack();
     print(polizline);
+    while (stackIf.empty() == false) {
+        delete stackIf.top();
+        stackIf.pop();
+    }
+    while (stackWhile.empty() == false) {
+        delete stackWhile.top();
+        stackWhile.pop();
+    }
     for (size_t i = 0; i < poliz.size(); i++) {
         for (size_t j = 0; j < poliz[i].size(); j++) {
             delete poliz[i][j];
@@ -410,6 +429,91 @@ bool Parser::getGoto() {
     }
 }
 
+bool Parser::getIf() {
+    skipSpaces();
+    string op = subcodeline(2);
+    if (op.compare("if") == 0) {
+        stackIf.push(new Goto(IF));
+        opers.push(stackIf.top());
+        shift(2);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getElse() {
+    skipSpaces();
+    string op = subcodeline(4);
+    if (op.compare("else") == 0 && stackIf.empty() == false) {
+        stackIf.top()->setRow(row + 1);
+        stackIf.pop();
+        stackIf.push(new Goto(ELSE));
+        polizline.push_back(stackIf.top());
+        shift(4);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getWhile() {
+    skipSpaces();
+    string op = subcodeline(5);
+    if (op.compare("while") == 0) {
+        stackWhile.push(new Goto(WHILE));
+        stackWhile.top()->setRow(row);
+        opers.push(stackWhile.top());
+        shift(5);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getThen() {
+    skipSpaces();
+    string op = subcodeline(4);
+    if (op.compare("then") == 0) {
+        polizline.push_back(opers.top());
+        opers.pop();
+        shift(4);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getEndif() {
+    skipSpaces();
+    string op = subcodeline(5);
+    if (op.compare("endif") == 0 && stackIf.empty() == false) {
+        stackIf.top()->setRow(row + 1);
+        stackIf.pop();
+        polizline.push_back(nullptr);
+        shift(5);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getEndwhile() {
+    skipSpaces();
+    string op = subcodeline(8);
+    if (op.compare("endwhile") == 0 && stackWhile.empty() == false) {
+        Goto *endwhile = new Goto(ENDWHILE);
+        endwhile->setRow(stackWhile.top()->getRow());
+        stackWhile.top()->setRow(row + 1);
+        stackWhile.pop();
+        polizline.push_back(endwhile);
+        shift(8);
+        return true;
+    } else {
+        return false;
+    }
+}
+
 bool Parser::getExpression() {
     if (getNumber()) {
         if (getAssignOperator() || getLeftBracket()) {
@@ -421,6 +525,10 @@ bool Parser::getExpression() {
         }
     } else if (getGoto()) {
         return getVariable();
+    } else if (getIf() || getWhile()) {
+        return getExpression() && getThen();
+    } else if (getEndif() || getEndwhile()) {
+        return true;
     } else if (getVariable()) {
         if (getLeftBracket()) {
             return false;
@@ -610,6 +718,30 @@ Number *currentResult(stack<Lexem *> & eval, Binary *binary, Assign *assign) {
     return result;
 }
 
+bool getCondValue(Lexem *condition) {
+    Variable *var = dynamic_cast<Variable *>(condition);
+    Number *num = dynamic_cast<Number *>(condition);
+    if (var) {
+        return !(var->getValue() == 0);
+    }
+    return !(num->getValue() == 0);
+}
+
+int jump(Goto *op, Lexem *condition, size_t row) {
+    OPERATOR type = op->getType();
+    bool condValue = getCondValue(condition);
+    if (type == IF || type == WHILE) {
+        if (condValue == false) {
+            return op->getRow();
+        } else {
+            return row + 1;
+        }
+    } else if (type == ENDWHILE) {
+        return op->getRow();
+    }
+    return op->getValue(*(dynamic_cast<Variable *>(condition)));
+}
+
 int evaluatePostfix(vector<Lexem *> postfix, size_t row) {
     int value;
     stack<Lexem *> eval;
@@ -621,9 +753,7 @@ int evaluatePostfix(vector<Lexem *> postfix, size_t row) {
         } else if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
             eval.push(*it);
         } else if (dynamic_cast<Goto *>(*it)) {
-            int newRow = dynamic_cast<Goto *>(*it)->getValue(*(dynamic_cast<Variable *>(eval.top())));
-            eval.pop();
-            return newRow;
+            return jump(dynamic_cast<Goto *>(*it), eval.top(), row);
         } else {
             intermediate.push_back(currentResult(eval, dynamic_cast<Binary *>(*it),
                                         dynamic_cast<Assign *>(*it)));
