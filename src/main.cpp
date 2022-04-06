@@ -18,6 +18,9 @@ using std::cerr;
 #define UNDEFINED -1
 
 enum OPERATOR {
+    IF, THEN,
+    ELSE, ENDIF,
+    WHILE, ENDWHILE,
     GOTO, ASSIGN, COLON,
     LBRACKET, RBRACKET,
     OR,
@@ -36,6 +39,9 @@ enum OPERATOR {
 };
 
 string OPERATOR_STRING[] = {
+    "if", "then",
+    "else", "endif",
+    "while", "endwhile",
     "goto", ":=", ":",
     "(", ")",
     "||",
@@ -54,6 +60,9 @@ string OPERATOR_STRING[] = {
 };
 
 int PRIORITY[] = {
+    -1, -1,
+    -1, -1,
+    -1, -1,
     -1, 0, -1,
     -1, -1,
     1,
@@ -96,7 +105,7 @@ public:
 };
 
 map<string, int> vars;
-map<string, size_t> labels;
+map<string, int> labels;
 
 class Oper : public Lexem {
     OPERATOR opertype;
@@ -119,16 +128,33 @@ public:
 };
 
 class Goto : public Oper {
+    int row;
 public:
-    Goto();
+    Goto(OPERATOR opertype);
+    void setRow(int row);
+    int getRow();
     int getValue(const Variable & var) const;
 };
 
-Goto::Goto() : Oper(GOTO) {
+Goto::Goto(OPERATOR opertype) : Oper(opertype) {
+    row = UNDEFINED;
+}
+
+void Goto::setRow(int row) {
+    Goto::row = row;
+}
+
+int Goto::getRow() {
+    return row;
 }
 
 int Goto::getValue(const Variable & var) const {
-    return labels[var.getName()];
+    if (getType() == GOTO) {
+        return labels[var.getName()];
+    } else {
+        cerr << "Error: invalid operation" << endl;
+        return -1;
+    }
 }
 
 class Parser {
@@ -348,10 +374,10 @@ bool Parser::getBinaryOperator() {
 
 bool Parser::initLabel() {
     string name = dynamic_cast<Variable *>(polizline.back())->getName();
-    if (labels.count(name) > 0 && labels[name] < row) {
+    if (labels.count(name) > 0 && labels[name] != UNDEFINED) {
         return false;
     } else {
-        labels[name] = row;
+        labels[name] = row + 1;
         return true;
     }
 }
@@ -364,6 +390,7 @@ bool Parser::getColon() {
         }
         delete polizline.back();
         polizline.pop_back();
+        polizline.push_back(nullptr);
         shift(1);
         return true;
     } else {
@@ -375,7 +402,7 @@ bool Parser::getGoto() {
     skipSpaces();
     string op = subcodeline(4);
     if (op.compare("goto") == 0) {
-        opers.push(new Goto());
+        opers.push(new Goto(GOTO));
         shift(4);
         return true;
     } else {
@@ -397,8 +424,10 @@ bool Parser::getExpression() {
     } else if (getVariable()) {
         if (getLeftBracket()) {
             return false;
-        } else if (getAssignOperator() || getColon() || getBinaryOperator()) {
+        } else if (getAssignOperator() || getBinaryOperator()) {
             return getExpression();
+        } else if (getColon()) {
+            return true;
         } else {
             return true;
         }
@@ -450,7 +479,7 @@ bool Parser::buildPoliz(vector<string> code) {
     for (size_t i = 0; i < code.size(); i++) {
         row = i;
         if (buildPolizline(code[i]) == false) {
-            cout << i << "!!!" << endl;
+            cout << i + 1 << "!!!" << endl;
             cerr << "Error: wrong syntax" << endl;
             return false;
         }
@@ -587,7 +616,9 @@ int evaluatePostfix(vector<Lexem *> postfix, size_t row) {
     vector<Lexem *>::iterator it;
     vector<Number *> intermediate;
     for (it = postfix.begin(); it != postfix.end(); it++) {
-        if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
+        if (*it == nullptr) {
+            continue;
+        } else if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
             eval.push(*it);
         } else if (dynamic_cast<Goto *>(*it)) {
             int newRow = dynamic_cast<Goto *>(*it)->getValue(*(dynamic_cast<Variable *>(eval.top())));
@@ -612,7 +643,9 @@ void print(vector<Lexem *> v) {
     vector<Lexem *>::iterator it;
     size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
     for (it = v.begin(); it != v.end(); it++) {
-        if (dynamic_cast<Number *>(*it)) {
+        if (*it == nullptr) {
+            continue;
+        } else if (dynamic_cast<Number *>(*it)) {
             cout << dynamic_cast<Number *>(*it)->getValue();
         } else if (dynamic_cast<Variable *>(*it)) {
             cout << dynamic_cast<Variable *>(*it)->getName();
