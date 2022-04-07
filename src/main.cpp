@@ -289,11 +289,17 @@ void Parser::clear() {
     }
     for (size_t i = 0; i < poliz.size(); i++) {
         for (size_t j = 0; j < poliz[i].size(); j++) {
+            if (poliz[i][j] == nullptr) {
+                continue;
+            }
             delete poliz[i][j];
         }
         poliz[i].clear();
     }
     for (size_t i = 0; i < polizline.size(); i++) {
+        if (polizline[i] == nullptr) {
+            continue;
+        }
         delete polizline[i];
     }
     polizline.clear();
@@ -527,7 +533,7 @@ bool Parser::getExpression() {
         return getVariable();
     } else if (getIf() || getWhile()) {
         return getExpression() && getThen();
-    } else if (getEndif() || getEndwhile()) {
+    } else if (getEndif() || getEndwhile() || getElse()) {
         return true;
     } else if (getVariable()) {
         if (getLeftBracket()) {
