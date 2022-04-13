@@ -80,6 +80,11 @@ int PRIORITY[] = {
     10, 10, 10
 };
 
+string RESERVED[] = {
+    "if", "else", "while",
+    "then", "endif", "endwhile"
+};
+
 class Lexem {
 public:
     Lexem() {}
@@ -158,20 +163,22 @@ int Goto::getValue(const Variable & var) const {
 }
 
 class Parser {
-    string codeline;
-    size_t position;
-    size_t row;
-    string subcodeline(size_t n);
-    void shift(size_t n);
+    vector<string> code;
+    int row;
+    int position;
+
+    string subcodeline(int n);
+    void shift(int n);
     void skipSpaces();
 
     stack<Oper *> opers;
-    stack<Goto *> stackIf;
-    stack<Goto *> stackWhile;
     vector<Lexem *> polizline;
 
+    bool getSequenceOfCommands();
     bool getCommand();
     bool getExpression();
+    bool endOfLine();
+    bool isReservedWord(string word);
 
     bool getNumber();
     bool getVariable();
@@ -184,6 +191,9 @@ class Parser {
     bool getColon();
     bool initLabel();
     bool getGoto();
+    bool getIfBlock();
+    bool getElseBlock();
+    bool getWhileBlock();
     bool getIf();
     bool getElse();
     bool getThen();
@@ -194,31 +204,30 @@ class Parser {
     void buildBracketExpr();
     void sortOpersRight(Oper *op);
     void sortOpersLeft(Oper *op);
+    void putCommandInPoliz();
     void putOperInPoliz(Oper *op);
     void freeStack();
     void clear();
-
-    bool buildPolizline(string codeline);
 public:
     vector<vector<Lexem *>> poliz;
     bool buildPoliz(vector<string> code);
     void erase();
 };
 
-string Parser::subcodeline(size_t n) {
+string Parser::subcodeline(int n) {
     string str;
-    for (size_t i = 0; i < n; i++) {
-        str.push_back(codeline[position + i]);
+    for (int i = 0; i < n && position + i < (int)code[row].size(); i++) {
+        str.push_back(code[row][position + i]);
     }
     return str;
 }
 
-void Parser::shift(size_t n) {
+void Parser::shift(int n) {
     position += n;
 }
 
 void Parser::skipSpaces() {
-    while (codeline[position] == ' ' || codeline[position] == '\t') {
+    while (code[row][position] == ' ' || code[row][position] == '\t') {
         position++;
     }
 }
@@ -270,7 +279,7 @@ void Parser::putOperInPoliz(Oper *op) {
 }
 
 void Parser::freeStack() {
-    while (!opers.empty()) {
+    while (!opers.empty() && opers.top()->getPriority() >= 0) {
         polizline.push_back(opers.top());
         opers.pop();
     }
@@ -279,16 +288,8 @@ void Parser::freeStack() {
 void Parser::clear() {
     freeStack();
     print(polizline);
-    while (stackIf.empty() == false) {
-        delete stackIf.top();
-        stackIf.pop();
-    }
-    while (stackWhile.empty() == false) {
-        delete stackWhile.top();
-        stackWhile.pop();
-    }
-    for (size_t i = 0; i < poliz.size(); i++) {
-        for (size_t j = 0; j < poliz[i].size(); j++) {
+    for (int i = 0; i < (int)poliz.size(); i++) {
+        for (int j = 0; j < (int)poliz[i].size(); j++) {
             if (poliz[i][j] == nullptr) {
                 continue;
             }
@@ -296,7 +297,7 @@ void Parser::clear() {
         }
         poliz[i].clear();
     }
-    for (size_t i = 0; i < polizline.size(); i++) {
+    for (int i = 0; i < (int)polizline.size(); i++) {
         if (polizline[i] == nullptr) {
             continue;
         }
@@ -308,33 +309,48 @@ void Parser::clear() {
 
 bool Parser::getNumber() {
     skipSpaces();
-    int number = codeline[position] - '0';
-    if (isdigit(codeline[position])) {
+    int number = code[row][position] - '0';
+    if (isdigit(code[row][position])) {
         shift(1);
     } else {
         return false;
     }
-    while (isdigit(codeline[position])) {
-        number = number * 10 + codeline[position] - '0';
+    while (isdigit(code[row][position])) {
+        number = number * 10 + code[row][position] - '0';
         shift(1);
     }
     polizline.push_back(new Number(number));
     return true;
 }
 
+bool Parser::isReservedWord(string word) {
+    int n = (int)sizeof(RESERVED) / sizeof(string);
+    for (int i = 0; i < n; i++) {
+        if (word.compare(RESERVED[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Parser::getVariable() {
     skipSpaces();
-    string name(1, codeline[position]);
-    if (isalpha(codeline[position]) || codeline[position] == '_') {
-        shift(1);
+    string name;
+    int length = 0;
+    if (isalpha(code[row][position]) || code[row][position] == '_') {
+        length++;
     } else {
         return false;
     }
-    while (isalpha(codeline[position]) || isdigit(codeline[position]) ||
-           codeline[position] == '_') {
-        name.push_back(codeline[position]);
-        shift(1);
+    while (isalpha(code[row][position + length]) || isdigit(code[row][position + length]) ||
+           code[row][position + length] == '_') {
+           length++;
     }
+    name = subcodeline(length);
+    if (isReservedWord(name)) {
+        return false;
+    }
+    shift(length);
     polizline.push_back(new Variable(name));
     if (!opers.empty() && opers.top()->getType() == GOTO) {
         if (labels.count(name) == 0) {
@@ -360,7 +376,7 @@ bool Parser::getAssignOperator() {
 
 bool Parser::getLeftBracket() {
     skipSpaces();
-    if (codeline[position] == '(') {
+    if (code[row][position] == '(') {
         putOperInPoliz(new Binary(LBRACKET));
         shift(1);
         return true;
@@ -371,7 +387,7 @@ bool Parser::getLeftBracket() {
 
 bool Parser::getRightBracket() {
     skipSpaces();
-    if (codeline[position] == ')') {
+    if (code[row][position] == ')') {
         putOperInPoliz(new Binary(RBRACKET));
         shift(1);
         return true;
@@ -381,9 +397,9 @@ bool Parser::getRightBracket() {
 }
 
 bool Parser::getBinaryOperator() {
-    size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
+    int n = (int)sizeof(OPERATOR_STRING) / sizeof(string);
     skipSpaces();
-    for (size_t i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {
         if (PRIORITY[i] < 0) {
             continue;
         }
@@ -409,7 +425,7 @@ bool Parser::initLabel() {
 
 bool Parser::getColon() {
     skipSpaces();
-    if (codeline[position] == ':') {
+    if (code[row][position] == ':') {
         if (initLabel() == false) {
             return false;
         }
@@ -439,8 +455,7 @@ bool Parser::getIf() {
     skipSpaces();
     string op = subcodeline(2);
     if (op.compare("if") == 0) {
-        stackIf.push(new Goto(IF));
-        opers.push(stackIf.top());
+        opers.push(new Goto(IF));
         shift(2);
         return true;
     } else {
@@ -451,11 +466,11 @@ bool Parser::getIf() {
 bool Parser::getElse() {
     skipSpaces();
     string op = subcodeline(4);
-    if (op.compare("else") == 0 && stackIf.empty() == false) {
-        stackIf.top()->setRow(row + 1);
-        stackIf.pop();
-        stackIf.push(new Goto(ELSE));
-        polizline.push_back(stackIf.top());
+    if (op.compare("else") == 0 && !opers.top() && opers.top()->getType() == IF) {
+        dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
+        opers.pop();
+        opers.push(new Goto(ELSE));
+        polizline.push_back(opers.top());
         shift(4);
         return true;
     } else {
@@ -467,9 +482,9 @@ bool Parser::getWhile() {
     skipSpaces();
     string op = subcodeline(5);
     if (op.compare("while") == 0) {
-        stackWhile.push(new Goto(WHILE));
-        stackWhile.top()->setRow(row);
-        opers.push(stackWhile.top());
+        Goto *newWhile = new Goto(WHILE);
+        newWhile->setRow(row);
+        opers.push(newWhile);
         shift(5);
         return true;
     } else {
@@ -482,7 +497,6 @@ bool Parser::getThen() {
     string op = subcodeline(4);
     if (op.compare("then") == 0) {
         polizline.push_back(opers.top());
-        opers.pop();
         shift(4);
         return true;
     } else {
@@ -493,9 +507,10 @@ bool Parser::getThen() {
 bool Parser::getEndif() {
     skipSpaces();
     string op = subcodeline(5);
-    if (op.compare("endif") == 0 && stackIf.empty() == false) {
-        stackIf.top()->setRow(row + 1);
-        stackIf.pop();
+    if (op.compare("endif") == 0 && !opers.empty() &&
+    (opers.top()->getType() == IF || opers.top()->getType() == ELSE)) {
+        dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
+        opers.pop();
         polizline.push_back(nullptr);
         shift(5);
         return true;
@@ -507,11 +522,12 @@ bool Parser::getEndif() {
 bool Parser::getEndwhile() {
     skipSpaces();
     string op = subcodeline(8);
-    if (op.compare("endwhile") == 0 && stackWhile.empty() == false) {
+    if (op.compare("endwhile") == 0 && !opers.empty() && opers.top()->getType() == WHILE) {
         Goto *endwhile = new Goto(ENDWHILE);
-        endwhile->setRow(stackWhile.top()->getRow());
-        stackWhile.top()->setRow(row + 1);
-        stackWhile.pop();
+        int loopRow = dynamic_cast<Goto *>(opers.top())->getRow();
+        endwhile->setRow(loopRow);
+        dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
+        opers.pop();
         polizline.push_back(endwhile);
         shift(8);
         return true;
@@ -527,14 +543,11 @@ bool Parser::getExpression() {
         } else if (getBinaryOperator()) {
             return getExpression();
         } else {
+            freeStack();
             return true;
         }
     } else if (getGoto()) {
         return getVariable();
-    } else if (getIf() || getWhile()) {
-        return getExpression() && getThen();
-    } else if (getEndif() || getEndwhile() || getElse()) {
-        return true;
     } else if (getVariable()) {
         if (getLeftBracket()) {
             return false;
@@ -543,6 +556,7 @@ bool Parser::getExpression() {
         } else if (getColon()) {
             return true;
         } else {
+            freeStack();
             return true;
         }
     } else if (getLeftBracket() && getExpression() && getRightBracket()) {
@@ -551,37 +565,89 @@ bool Parser::getExpression() {
         } else if (getBinaryOperator()) {
             return getExpression();
         } else {
+            freeStack();
             return true;
         }
     }
     return false;
 }
 
-bool Parser::getCommand() {
-    if (getExpression() && (position == codeline.size())) {
-        freeStack();
+void Parser::putCommandInPoliz() {
+    poliz.push_back(polizline);
+    print(polizline);
+    polizline.clear();
+    row++;
+    position = 0;
+}
+
+bool Parser::endOfLine() {
+    if (position == (int)code[row].size()) {
         return true;
     } else {
         return false;
     }
 }
 
-bool Parser::buildPolizline(string codeline) {
-    Parser::codeline = codeline;
-    polizline.clear();
-    position = 0;
-    if (getCommand()) {
-        print(polizline);
+bool Parser::getElseBlock() {
+    if (getElse() && endOfLine()) {
+        putCommandInPoliz();
+        if (getSequenceOfCommands() && getEndif() && endOfLine()) {
+            putCommandInPoliz();
+            return true;
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getIfBlock() {
+    if (getIf() && getExpression() && getThen() && endOfLine()) {
+        putCommandInPoliz();
+        if (getSequenceOfCommands()) {
+            if (getElseBlock()) {
+                return true;
+            } else if (getEndif() && endOfLine()) {
+                putCommandInPoliz();
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getWhileBlock() {
+    if (getWhile() && getExpression() && getThen() && endOfLine()) {
+        putCommandInPoliz();
+        if (getSequenceOfCommands() && getEndwhile() && endOfLine()) {
+            putCommandInPoliz();
+            return true;
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getCommand() {
+    if (getExpression() && endOfLine()) {
+        putCommandInPoliz();
         return true;
     } else {
-        clear();
         return false;
     }
 }
 
 void Parser::erase() {
-    for (size_t i = 0; i < poliz.size(); i++) {
-        for (size_t j = 0; j < poliz[i].size(); j++) {
+    for (int i = 0; i < (int)poliz.size(); i++) {
+        for (int j = 0; j < (int)poliz[i].size(); j++) {
             delete poliz[i][j];
         }
         poliz[i].clear();
@@ -589,17 +655,24 @@ void Parser::erase() {
     poliz.clear();
 }
 
-bool Parser::buildPoliz(vector<string> code) {
-    for (size_t i = 0; i < code.size(); i++) {
-        row = i;
-        if (buildPolizline(code[i]) == false) {
-            cout << i + 1 << "!!!" << endl;
-            cerr << "Error: wrong syntax" << endl;
-            return false;
-        }
-        poliz.push_back(polizline);
+
+bool Parser::getSequenceOfCommands() {
+    if (row == (int)code.size()) {
+        return true;
+    } else if (getWhileBlock() || getIfBlock()) {
+        return getSequenceOfCommands();
+    } else if (getCommand()){
+        return getSequenceOfCommands();
+    } else {
+        return true;
     }
-    return true;
+}
+
+bool Parser::buildPoliz(vector<string> code) {
+    Parser::code = code;
+    row = 0;
+    position = 0;
+    return getSequenceOfCommands();
 }
 
 Number::Number(int value) {
@@ -636,8 +709,8 @@ OPERATOR Oper::getType() const {
 
 int Oper::getPriority() const {
     int priority;
-    size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
-    for (size_t i = 0; i < n; i++) {
+    int n = (int)sizeof(OPERATOR_STRING) / sizeof(string);
+    for (int i = 0; i < n; i++) {
         if (opertype == OPERATOR(i)) {
             priority = PRIORITY[i];
         }
@@ -752,7 +825,7 @@ int jump(Goto *op, stack<Lexem *> & eval, size_t row) {
     return op->getRow();
 }
 
-int evaluatePostfix(vector<Lexem *> postfix, size_t row) {
+int evaluatePostfix(vector<Lexem *> postfix, int row) {
     int value, nextRow = row + 1;
     stack<Lexem *> eval;
     vector<Lexem *>::iterator it;
@@ -775,7 +848,7 @@ int evaluatePostfix(vector<Lexem *> postfix, size_t row) {
         cout << value << endl;
         delete eval.top();
     }
-    for (ssize_t i = 0; i < (ssize_t)intermediate.size() - 1; i++) {
+    for (int i = 0; i < (int)intermediate.size() - 1; i++) {
         delete intermediate[i];
     }
     return nextRow;
@@ -783,18 +856,18 @@ int evaluatePostfix(vector<Lexem *> postfix, size_t row) {
 
 void print(vector<Lexem *> v) {
     vector<Lexem *>::iterator it;
-    size_t n = sizeof(OPERATOR_STRING) / sizeof(string);
+    int n = (int)sizeof(OPERATOR_STRING) / sizeof(string);
     for (it = v.begin(); it != v.end(); it++) {
         if (*it == nullptr) {
             continue;
         } else if (dynamic_cast<Number *>(*it)) {
-            cout << dynamic_cast<Number *>(*it)->getValue();
+            cout << "[" <<dynamic_cast<Number *>(*it)->getValue() << "] ";
         } else if (dynamic_cast<Variable *>(*it)) {
-            cout << dynamic_cast<Variable *>(*it)->getName();
+            cout << "[" << dynamic_cast<Variable *>(*it)->getName() << "] ";
         } else {
-            for (size_t i = 0; i < n; i++) {
+            for (int i = 0; i < n; i++) {
                 if (dynamic_cast<Oper *>(*it)->getType() == OPERATOR(i)) {
-                    cout << OPERATOR_STRING[i];
+                    cout << "[" << OPERATOR_STRING[i] << "] ";
                 }
             }
         }
@@ -820,8 +893,8 @@ int main() {
     }
 
     if (parser.buildPoliz(code)) {
-        size_t i = 0;
-        while (i < code.size()) {
+        int i = 0;
+        while (i < (int)code.size()) {
             i = evaluatePostfix(parser.poliz[i], i);
             printMap();
         }
