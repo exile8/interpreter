@@ -672,7 +672,13 @@ bool Parser::buildPoliz(vector<string> code) {
     Parser::code = code;
     row = 0;
     position = 0;
-    return getSequenceOfCommands();
+    if (getSequenceOfCommands() && (row == (int)code.size())) {
+        return true;
+    } else {
+        clear();
+        cerr << "Syntax error: line " << row + 1 << endl;
+        return false;
+    }
 }
 
 Number::Number(int value) {
