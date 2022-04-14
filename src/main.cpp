@@ -466,7 +466,7 @@ bool Parser::getIf() {
 bool Parser::getElse() {
     skipSpaces();
     string op = subcodeline(4);
-    if (op.compare("else") == 0 && !opers.top() && opers.top()->getType() == IF) {
+    if (op.compare("else") == 0 && !opers.empty() && opers.top()->getType() == IF) {
         dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
         opers.pop();
         opers.push(new Goto(ELSE));
