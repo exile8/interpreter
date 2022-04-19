@@ -23,6 +23,7 @@ enum OPERATOR {
     WHILE, ENDWHILE,
     GOTO, ASSIGN, COLON,
     LBRACKET, RBRACKET,
+    LQBRACKET, RQBRACKET, DEREF,
     OR,
     AND,
     BITOR,
@@ -44,6 +45,7 @@ string OPERATOR_STRING[] = {
     "while", "endwhile",
     "goto", ":=", ":",
     "(", ")",
+    "[", "]", "dereference",
     "||",
     "&&",
     "|",
@@ -65,6 +67,7 @@ int PRIORITY[] = {
     -1, -1,
     -1, 0, -1,
     -1, -1,
+    -1, -1, -1,
     1,
     2,
     3,
@@ -126,12 +129,6 @@ public:
     int getValue(int left, int right) const;
 };
 
-class Assign : public Oper {
-public:
-    Assign() : Oper(ASSIGN) {}
-    int getValue(const Variable & left, int right) const;
-};
-
 class Goto : public Oper {
     int row;
 public:
@@ -162,6 +159,51 @@ int Goto::getValue(const Variable & var) const {
     }
 }
 
+class ArrayElem : public Lexem {
+    string name;
+    int index;
+public:
+    ArrayElem(const Variable & array, int index);
+    int getValue() const;
+    void setValue(int value) const;
+};
+
+map<string, vector<int>> ArrayTable;
+
+ArrayElem::ArrayElem(const Variable & array, int index) {
+    name = array.getName();
+    ArrayElem::index = index;
+}
+
+int ArrayElem::getValue() const {
+    return ArrayTable[name][index];
+}
+
+void ArrayElem::setValue(int value) const {
+    if ((int)ArrayTable[name].size() < index + 1) {
+        ArrayTable[name].resize(index + 1);
+    }
+    ArrayTable[name][index] = value;
+}
+
+class Dereference : public Oper {
+public:
+    Dereference() : Oper(DEREF) {}
+    ArrayElem *getValue(const Variable & array, int index) const;
+};
+
+ArrayElem *Dereference::getValue(const Variable & array, int index) const {
+    ArrayElem *elem = new ArrayElem(array, index);
+    return elem;
+}
+
+class Assign : public Oper {
+public:
+    Assign() : Oper(ASSIGN) {}
+    int getValue(const Variable & left, int right) const;
+    int getValue(const ArrayElem & left, int right) const;
+};
+
 class Parser {
     vector<string> code;
     int row;
@@ -187,6 +229,8 @@ class Parser {
     bool getBinaryOperator();
     bool getLeftBracket();
     bool getRightBracket();
+    bool getLeftQBracket();
+    bool getRightQBracket();
 
     bool getColon();
     bool initLabel();
@@ -536,6 +580,27 @@ bool Parser::getEndwhile() {
     }
 }
 
+bool Parser::getLeftQBracket() {
+    if (code[row][position] == '[') {
+        shift(1);
+        opers.push(new Dereference());
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Parser::getRightQBracket() {
+    if (code[row][position] == ']') {
+        shift(1);
+        polizline.push_back(opers.top());
+        opers.pop();
+        return true;
+    } else {
+        return false;
+    }
+}
+
 bool Parser::getExpression() {
     if (getNumber()) {
         if (getAssignOperator() || getLeftBracket()) {
@@ -555,6 +620,13 @@ bool Parser::getExpression() {
             return getExpression();
         } else if (getColon()) {
             return true;
+        } else if (getLeftQBracket() && getExpression() && getRightQBracket()) {
+            if (getAssignOperator() || getBinaryOperator()) {
+                return getExpression();
+            } else {
+                freeStack();
+                return true;
+            }
         } else {
             freeStack();
             return true;
@@ -605,7 +677,7 @@ bool Parser::getElseBlock() {
 bool Parser::getIfBlock() {
     if (getIf() && getExpression() && getThen() && endOfLine()) {
         putCommandInPoliz();
-        if (getSequenceOfCommands()) {
+        if (!getSequenceOfCommands()) {
             if (getElseBlock()) {
                 return true;
             } else if (getEndif() && endOfLine()) {
@@ -625,7 +697,7 @@ bool Parser::getIfBlock() {
 bool Parser::getWhileBlock() {
     if (getWhile() && getExpression() && getThen() && endOfLine()) {
         putCommandInPoliz();
-        if (getSequenceOfCommands() && getEndwhile() && endOfLine()) {
+        if (!getSequenceOfCommands() && getEndwhile() && endOfLine()) {
             putCommandInPoliz();
             return true;
         } else {
@@ -659,12 +731,10 @@ void Parser::erase() {
 bool Parser::getSequenceOfCommands() {
     if (row == (int)code.size()) {
         return true;
-    } else if (getWhileBlock() || getIfBlock()) {
-        return getSequenceOfCommands();
-    } else if (getCommand()){
+    } else if (getWhileBlock() || getIfBlock() || getCommand()) {
         return getSequenceOfCommands();
     } else {
-        return true;
+        return false;
     }
 }
 
@@ -779,25 +849,51 @@ int Assign::getValue(const Variable & left, int right) const {
     }
 }
 
+int Assign::getValue(const ArrayElem & left, int right) const {
+    if (getType() == ASSIGN) {
+        left.setValue(right);
+        return right;
+    } else {
+        cerr << "Error: invalid operation" << endl;
+        return -1;
+    }
+}
 
-Number *currentResult(stack<Lexem *> & eval, Binary *binary, Assign *assign) {
+Lexem *currentResult(stack<Lexem *> & eval, Binary *binary, Assign *assign, Dereference *deref) {
     int rightArg;
-    Number *result;
+    Lexem *result;
     if (dynamic_cast<Number *>(eval.top())) {
         rightArg = dynamic_cast<Number *>(eval.top())->getValue();
-    } else {
+    } else if (dynamic_cast<Variable *>(eval.top())){
         rightArg = dynamic_cast<Variable *>(eval.top())->getValue();
+    } else {
+        rightArg = dynamic_cast<ArrayElem *>(eval.top())->getValue();
     }
     eval.pop();
+    if (eval.empty()) {
+        result = new Number(rightArg);
+        return result;
+    }
     if (assign != nullptr) {
-        Variable *left = dynamic_cast<Variable *>(eval.top());
-        result = new Number(assign->getValue(*left, rightArg));
+        if (dynamic_cast<Variable *>(eval.top())) {
+            Variable *left = dynamic_cast<Variable *>(eval.top());
+            result = new Number(assign->getValue(*left, rightArg));
+        } else {
+            ArrayElem *leftArr = dynamic_cast<ArrayElem *>(eval.top());
+            result = new Number(assign->getValue(*leftArr, rightArg));
+        }
+    } else if (deref != nullptr) {
+        Variable *arrName = dynamic_cast<Variable *>(eval.top());
+        result = deref->getValue(*arrName, rightArg);
     } else if (dynamic_cast<Number *>(eval.top())) {
         int leftNum = dynamic_cast<Number *>(eval.top())->getValue();
         result = new Number(binary->getValue(leftNum, rightArg));
-    } else {
+    } else if (dynamic_cast<Variable *>(eval.top())){
         int leftVar = dynamic_cast<Variable *>(eval.top())->getValue();
         result = new Number(binary->getValue(leftVar, rightArg));
+    } else {
+        int leftArrElem = dynamic_cast<ArrayElem *>(eval.top())->getValue();
+        result = new Number(binary->getValue(leftArrElem, rightArg));
     }
     eval.pop();
     return result;
@@ -835,7 +931,7 @@ int evaluatePostfix(vector<Lexem *> postfix, int row) {
     int value, nextRow = row + 1;
     stack<Lexem *> eval;
     vector<Lexem *>::iterator it;
-    vector<Number *> intermediate;
+    vector<Lexem *> intermediate;
     for (it = postfix.begin(); it != postfix.end(); it++) {
         if (*it == nullptr) {
             continue;
@@ -845,7 +941,7 @@ int evaluatePostfix(vector<Lexem *> postfix, int row) {
             nextRow = jump(dynamic_cast<Goto *>(*it), eval, row);
         } else {
             intermediate.push_back(currentResult(eval, dynamic_cast<Binary *>(*it),
-                                        dynamic_cast<Assign *>(*it)));
+                            dynamic_cast<Assign *>(*it), dynamic_cast<Dereference *>(*it)));
             eval.push(intermediate.back());
         }
     }
@@ -883,9 +979,19 @@ void print(vector<Lexem *> v) {
 
 void printMap() {
     map<string, int>::iterator it;
+    map<string, vector<int>>::iterator it2;
     cout << "--------Variables--------" << endl;
     for (it = vars.begin(); it != vars.end(); it++) {
         cout << it->first << " = " << it->second << endl;
+    }
+    cout << "-------------------------" << endl;
+    cout << "--------Arrays--------" << endl;
+    for (it2 = ArrayTable.begin(); it2 != ArrayTable.end(); it2++) {
+        cout << it2->first << ": ";
+        for (int i = 0; i < (int)ArrayTable[it2->first].size(); i++) {
+            cout << "[" << ArrayTable[it2->first][i] << "] ";
+        }
+        cout << endl;
     }
     cout << "-------------------------" << endl;
 }
