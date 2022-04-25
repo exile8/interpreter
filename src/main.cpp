@@ -249,7 +249,6 @@ class Parser {
     void sortOpersRight(Oper *op);
     void sortOpersLeft(Oper *op);
     void putCommandInPoliz();
-    void putOperInPoliz(Oper *op);
     void freeStack();
     void clear();
 public:
@@ -301,25 +300,6 @@ void Parser::sortOpersLeft(Oper *op) {
         opers.pop();
     }
     opers.push(op);
-}
-
-void Parser::putOperInPoliz(Oper *op) {
-    if (dynamic_cast<Assign *>(op)) {
-        sortOpersRight(op);
-    } else {
-        switch (dynamic_cast<Binary *>(op)->getType()) {
-            case LBRACKET:
-                opers.push(op);
-                break;
-            case RBRACKET:
-                delete op;
-                buildBracketExpr();
-                break;
-            default:
-                sortOpersLeft(op);
-                break;
-        }
-    }
 }
 
 void Parser::freeStack() {
@@ -411,7 +391,7 @@ bool Parser::getAssignOperator() {
     string op = subcodeline(2);
     if (op.compare(OPERATOR_STRING[ASSIGN]) == 0) {
         shift(2);
-        putOperInPoliz(new Assign());
+        sortOpersRight(new Assign());
         return true;
     } else {
         return false;
@@ -422,7 +402,7 @@ bool Parser::getLeftBracket() {
     skipSpaces();
     string op = subcodeline(1);
     if (op.compare(OPERATOR_STRING[LBRACKET]) == 0) {
-        putOperInPoliz(new Binary(LBRACKET));
+        opers.push(new Binary(LBRACKET));
         shift(1);
         return true;
     } else {
@@ -434,7 +414,7 @@ bool Parser::getRightBracket() {
     skipSpaces();
     string op = subcodeline(1);
     if (op.compare(OPERATOR_STRING[RBRACKET]) == 0) {
-        putOperInPoliz(new Binary(RBRACKET));
+        buildBracketExpr();
         shift(1);
         return true;
     } else {
@@ -451,7 +431,7 @@ bool Parser::getBinaryOperator() {
         }
         string op = subcodeline(OPERATOR_STRING[i].size());
         if (op.compare(OPERATOR_STRING[i]) == 0) {
-            putOperInPoliz(new Binary(OPERATOR(i)));
+            sortOpersLeft(new Binary(OPERATOR(i)));
             shift(OPERATOR_STRING[i].size());
             return true;
         }
@@ -586,7 +566,6 @@ bool Parser::getLeftQBracket() {
     string op = subcodeline(1);
     if (op.compare(OPERATOR_STRING[LQBRACKET]) == 0) {
         shift(1);
-        opers.push(new Dereference());
         return true;
     } else {
         return false;
@@ -597,8 +576,7 @@ bool Parser::getRightQBracket() {
     string op = subcodeline(1);
     if (op.compare(OPERATOR_STRING[RQBRACKET]) == 0) {
         shift(1);
-        polizline.push_back(opers.top());
-        opers.pop();
+        polizline.push_back(new Dereference());
         return true;
     } else {
         return false;
