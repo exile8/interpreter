@@ -232,8 +232,8 @@ class Parser {
     bool getLeftQBracket();
     bool getRightQBracket();
 
-    bool getColon();
-    bool initLabel();
+    bool getLabel();
+    bool initLabel(string name);
     bool getGoto();
     bool getIfBlock();
     bool getElseBlock();
@@ -439,8 +439,10 @@ bool Parser::getBinaryOperator() {
     return false;
 }
 
-bool Parser::initLabel() {
-    string name = dynamic_cast<Variable *>(polizline.back())->getName();
+bool Parser::initLabel(string name) {
+    if (isReservedWord(name)) {
+        return false;
+    }
     if (labels.count(name) > 0 && labels[name] != UNDEFINED) {
         return false;
     } else {
@@ -449,21 +451,30 @@ bool Parser::initLabel() {
     }
 }
 
-bool Parser::getColon() {
+bool Parser::getLabel() {
     skipSpaces();
-    string op = subcodeline(1);
-    if (op.compare(OPERATOR_STRING[COLON]) == 0) {
-        if (initLabel() == false) {
-            return false;
-        }
-        delete polizline.back();
-        polizline.pop_back();
-        polizline.push_back(nullptr);
-        shift(1);
-        return true;
+    string name, op;
+    int length = 0;
+    if (isalpha(code[row][position]) || code[row][position] == '_') {
+        length++;
     } else {
         return false;
     }
+    while (isalpha(code[row][position + length]) || isdigit(code[row][position + length]) ||
+           code[row][position + length] == '_') {
+           length++;
+    }
+    op.push_back(code[row][position + length]);
+    if (op.compare(OPERATOR_STRING[COLON]) == 0) {
+        name = subcodeline(length);
+        if (initLabel(name) == false) {
+            return false;
+        }
+        polizline.push_back(nullptr);
+        shift(length + 1);
+        return true;
+    }
+    return false;
 }
 
 bool Parser::getGoto() {
@@ -593,15 +604,11 @@ bool Parser::getExpression() {
             freeStack();
             return true;
         }
-    } else if (getGoto()) {
-        return getVariable();
     } else if (getVariable()) {
         if (getLeftBracket()) {
             return false;
         } else if (getAssignOperator() || getBinaryOperator()) {
             return getExpression();
-        } else if (getColon()) {
-            return true;
         } else if (getLeftQBracket() && getExpression() && getRightQBracket()) {
             if (getAssignOperator() || getBinaryOperator()) {
                 return getExpression();
@@ -691,7 +698,7 @@ bool Parser::getWhileBlock() {
 }
 
 bool Parser::getCommand() {
-    if (getExpression() && endOfLine()) {
+    if (((getGoto() && getVariable()) || getLabel() || getExpression()) && endOfLine()) {
         putCommandInPoliz();
         return true;
     } else {
