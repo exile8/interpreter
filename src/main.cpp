@@ -409,7 +409,7 @@ bool Parser::getVariable() {
 bool Parser::getAssignOperator() {
     skipSpaces();
     string op = subcodeline(2);
-    if (op.compare(":=") == 0) {
+    if (op.compare(OPERATOR_STRING[ASSIGN]) == 0) {
         shift(2);
         putOperInPoliz(new Assign());
         return true;
@@ -420,7 +420,8 @@ bool Parser::getAssignOperator() {
 
 bool Parser::getLeftBracket() {
     skipSpaces();
-    if (code[row][position] == '(') {
+    string op = subcodeline(1);
+    if (op.compare(OPERATOR_STRING[LBRACKET]) == 0) {
         putOperInPoliz(new Binary(LBRACKET));
         shift(1);
         return true;
@@ -431,7 +432,8 @@ bool Parser::getLeftBracket() {
 
 bool Parser::getRightBracket() {
     skipSpaces();
-    if (code[row][position] == ')') {
+    string op = subcodeline(1);
+    if (op.compare(OPERATOR_STRING[RBRACKET]) == 0) {
         putOperInPoliz(new Binary(RBRACKET));
         shift(1);
         return true;
@@ -469,7 +471,8 @@ bool Parser::initLabel() {
 
 bool Parser::getColon() {
     skipSpaces();
-    if (code[row][position] == ':') {
+    string op = subcodeline(1);
+    if (op.compare(OPERATOR_STRING[COLON]) == 0) {
         if (initLabel() == false) {
             return false;
         }
@@ -486,7 +489,7 @@ bool Parser::getColon() {
 bool Parser::getGoto() {
     skipSpaces();
     string op = subcodeline(4);
-    if (op.compare("goto") == 0) {
+    if (op.compare(OPERATOR_STRING[GOTO]) == 0) {
         opers.push(new Goto(GOTO));
         shift(4);
         return true;
@@ -498,7 +501,7 @@ bool Parser::getGoto() {
 bool Parser::getIf() {
     skipSpaces();
     string op = subcodeline(2);
-    if (op.compare("if") == 0) {
+    if (op.compare(OPERATOR_STRING[IF]) == 0) {
         opers.push(new Goto(IF));
         shift(2);
         return true;
@@ -510,7 +513,7 @@ bool Parser::getIf() {
 bool Parser::getElse() {
     skipSpaces();
     string op = subcodeline(4);
-    if (op.compare("else") == 0 && !opers.empty() && opers.top()->getType() == IF) {
+    if (op.compare(OPERATOR_STRING[ELSE]) == 0) {
         dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
         opers.pop();
         opers.push(new Goto(ELSE));
@@ -525,7 +528,7 @@ bool Parser::getElse() {
 bool Parser::getWhile() {
     skipSpaces();
     string op = subcodeline(5);
-    if (op.compare("while") == 0) {
+    if (op.compare(OPERATOR_STRING[WHILE]) == 0) {
         Goto *newWhile = new Goto(WHILE);
         newWhile->setRow(row);
         opers.push(newWhile);
@@ -539,7 +542,7 @@ bool Parser::getWhile() {
 bool Parser::getThen() {
     skipSpaces();
     string op = subcodeline(4);
-    if (op.compare("then") == 0) {
+    if (op.compare(OPERATOR_STRING[THEN]) == 0) {
         polizline.push_back(opers.top());
         shift(4);
         return true;
@@ -551,8 +554,7 @@ bool Parser::getThen() {
 bool Parser::getEndif() {
     skipSpaces();
     string op = subcodeline(5);
-    if (op.compare("endif") == 0 && !opers.empty() &&
-    (opers.top()->getType() == IF || opers.top()->getType() == ELSE)) {
+    if (op.compare(OPERATOR_STRING[ENDIF]) == 0) {
         dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
         opers.pop();
         polizline.push_back(nullptr);
@@ -566,7 +568,7 @@ bool Parser::getEndif() {
 bool Parser::getEndwhile() {
     skipSpaces();
     string op = subcodeline(8);
-    if (op.compare("endwhile") == 0 && !opers.empty() && opers.top()->getType() == WHILE) {
+    if (op.compare(OPERATOR_STRING[ENDWHILE]) == 0) {
         Goto *endwhile = new Goto(ENDWHILE);
         int loopRow = dynamic_cast<Goto *>(opers.top())->getRow();
         endwhile->setRow(loopRow);
@@ -581,7 +583,8 @@ bool Parser::getEndwhile() {
 }
 
 bool Parser::getLeftQBracket() {
-    if (code[row][position] == '[') {
+    string op = subcodeline(1);
+    if (op.compare(OPERATOR_STRING[LQBRACKET]) == 0) {
         shift(1);
         opers.push(new Dereference());
         return true;
@@ -591,7 +594,8 @@ bool Parser::getLeftQBracket() {
 }
 
 bool Parser::getRightQBracket() {
-    if (code[row][position] == ']') {
+    string op = subcodeline(1);
+    if (op.compare(OPERATOR_STRING[RQBRACKET]) == 0) {
         shift(1);
         polizline.push_back(opers.top());
         opers.pop();
