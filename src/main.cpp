@@ -236,7 +236,6 @@ class Parser {
     bool initLabel(string name);
     bool getGoto();
     bool getIfBlock();
-    bool getElseBlock();
     bool getWhileBlock();
     bool getIf();
     bool getElse();
@@ -505,10 +504,7 @@ bool Parser::getElse() {
     skipSpaces();
     string op = getSubcodeline(4);
     if (op.compare(OPERATOR_STRING[ELSE]) == 0) {
-        dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
-        opers.pop();
-        opers.push(new Goto(ELSE));
-        polizline.push_back(opers.top());
+        polizline.push_back(new Goto(ELSE));
         shift(4);
         return true;
     } else {
@@ -520,9 +516,7 @@ bool Parser::getWhile() {
     skipSpaces();
     string op = getSubcodeline(5);
     if (op.compare(OPERATOR_STRING[WHILE]) == 0) {
-        Goto *newWhile = new Goto(WHILE);
-        newWhile->setRow(row);
-        opers.push(newWhile);
+        opers.push(new Goto(WHILE));
         shift(5);
         return true;
     } else {
@@ -546,8 +540,6 @@ bool Parser::getEndif() {
     skipSpaces();
     string op = getSubcodeline(5);
     if (op.compare(OPERATOR_STRING[ENDIF]) == 0) {
-        dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
-        opers.pop();
         polizline.push_back(nullptr);
         shift(5);
         return true;
@@ -560,12 +552,7 @@ bool Parser::getEndwhile() {
     skipSpaces();
     string op = getSubcodeline(8);
     if (op.compare(OPERATOR_STRING[ENDWHILE]) == 0) {
-        Goto *endwhile = new Goto(ENDWHILE);
-        int loopRow = dynamic_cast<Goto *>(opers.top())->getRow();
-        endwhile->setRow(loopRow);
-        dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
-        opers.pop();
-        polizline.push_back(endwhile);
+        polizline.push_back(new Goto(ENDWHILE));
         shift(8);
         return true;
     } else {
@@ -649,52 +636,43 @@ bool Parser::isEndOfLine() {
     }
 }
 
-bool Parser::getElseBlock() {
-    if (getElse() && isEndOfLine()) {
-        putCommandInPoliz();
-        if (getSequenceOfCommands() && getEndif() && isEndOfLine()) {
-            putCommandInPoliz();
-            return true;
-        } else {
-            return false;
-        }
-    } else {
-        return false;
-    }
-}
-
 bool Parser::getIfBlock() {
+    int ifRow;
     if (getIf() && getExpression() && getThen() && isEndOfLine()) {
+        ifRow = row;
         putCommandInPoliz();
         if (!getSequenceOfCommands()) {
-            if (getElseBlock()) {
-                return true;
-            } else if (getEndif() && isEndOfLine()) {
+            if (getElse() && isEndOfLine()) {
+                dynamic_cast<Goto *>(poliz[ifRow].back())->setRow(row + 1);
+                ifRow = row;
                 putCommandInPoliz();
-                return true;
-            } else {
-                return false;
+                if (getSequenceOfCommands()) {
+                    return false;
+                }
             }
-        } else {
-            return false;
+            if (getEndif() && isEndOfLine()) {
+                putCommandInPoliz();
+                dynamic_cast<Goto *>(poliz[ifRow].back())->setRow(row);
+                return true;
+            }
         }
-    } else {
-        return false;
     }
+    return false;
 }
 
 bool Parser::getWhileBlock() {
+    int whileRow;
     if (getWhile() && getExpression() && getThen() && isEndOfLine()) {
+        whileRow = row;
         putCommandInPoliz();
         if (!getSequenceOfCommands() && getEndwhile() && isEndOfLine()) {
+            dynamic_cast<Goto *>(polizline.front())->setRow(whileRow);
             putCommandInPoliz();
+            dynamic_cast<Goto *>(poliz[whileRow].back())->setRow(row);
             return true;
-        } else {
-            return false;
         }
-    } else {
-        return false;
     }
+    return false;
 }
 
 bool Parser::getCommand() {
