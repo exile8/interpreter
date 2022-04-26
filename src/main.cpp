@@ -112,8 +112,8 @@ public:
     void setValue(int value) const;
 };
 
-map<string, int> vars;
-map<string, int> labels;
+map<string, int> VarTable;
+map<string, int> LabelTable;
 
 class Oper : public Lexem {
     OPERATOR opertype;
@@ -152,7 +152,7 @@ int Goto::getRow() {
 
 int Goto::getValue(const Variable & var) const {
     if (getType() == GOTO) {
-        return labels[var.getName()];
+        return LabelTable[var.getName()];
     } else {
         cerr << "Error: invalid operation" << endl;
         return -1;
@@ -377,8 +377,8 @@ bool Parser::getVariable() {
     shift(length);
     polizline.push_back(new Variable(name));
     if (!opers.empty() && opers.top()->getType() == GOTO) {
-        if (labels.count(name) == 0) {
-            labels[name] = UNDEFINED;
+        if (LabelTable.count(name) == 0) {
+            LabelTable[name] = UNDEFINED;
         }
         polizline.push_back(opers.top());
         opers.pop();
@@ -443,10 +443,10 @@ bool Parser::initLabel(string name) {
     if (isReservedWord(name)) {
         return false;
     }
-    if (labels.count(name) > 0 && labels[name] != UNDEFINED) {
+    if (LabelTable.count(name) > 0 && LabelTable[name] != UNDEFINED) {
         return false;
     } else {
-        labels[name] = row + 1;
+        LabelTable[name] = row + 1;
         return true;
     }
 }
@@ -757,11 +757,11 @@ string Variable::getName() const {
 }
 
 int Variable::getValue() const {
-    return vars[name];
+    return VarTable[name];
 }
 
 void Variable::setValue(int value) const {
-    vars[name] = value;
+    VarTable[name] = value;
 }
 
 Oper::Oper(OPERATOR opertype) {
@@ -848,9 +848,12 @@ int Assign::getValue(const ArrayElem & left, int right) const {
     }
 }
 
-Lexem *currentResult(stack<Lexem *> & eval, Binary *binary, Assign *assign, Dereference *deref) {
+Lexem *currentResult(stack<Lexem *> & eval, Oper *op) {
     int rightArg;
     Lexem *result;
+    Binary *binary = dynamic_cast<Binary *>(op);
+    Assign *assign = dynamic_cast<Assign *>(op);
+    Dereference *deref = dynamic_cast<Dereference *>(op);
     if (dynamic_cast<Number *>(eval.top())) {
         rightArg = dynamic_cast<Number *>(eval.top())->getValue();
     } else if (dynamic_cast<Variable *>(eval.top())){
@@ -920,7 +923,7 @@ int evaluatePostfix(vector<Lexem *> postfix, int row) {
     int value, nextRow = row + 1;
     stack<Lexem *> eval;
     vector<Lexem *>::iterator it;
-    vector<Lexem *> intermediate;
+    vector<Lexem *> temporary;
     for (it = postfix.begin(); it != postfix.end(); it++) {
         if (*it == nullptr) {
             continue;
@@ -929,18 +932,16 @@ int evaluatePostfix(vector<Lexem *> postfix, int row) {
         } else if (dynamic_cast<Goto *>(*it)) {
             nextRow = jump(dynamic_cast<Goto *>(*it), eval, row);
         } else {
-            intermediate.push_back(currentResult(eval, dynamic_cast<Binary *>(*it),
-                            dynamic_cast<Assign *>(*it), dynamic_cast<Dereference *>(*it)));
-            eval.push(intermediate.back());
+            temporary.push_back(currentResult(eval, dynamic_cast<Oper *>(*it)));
+            eval.push(temporary.back());
         }
     }
     if (eval.empty() == false && dynamic_cast<Number *>(eval.top())) {
         value = dynamic_cast<Number *>(eval.top())->getValue();
         cout << value << endl;
-        delete eval.top();
     }
-    for (int i = 0; i < (int)intermediate.size() - 1; i++) {
-        delete intermediate[i];
+    for (int i = 0; i < (int)temporary.size(); i++) {
+        delete temporary[i];
     }
     return nextRow;
 }
@@ -970,11 +971,11 @@ void printMap() {
     map<string, int>::iterator it;
     map<string, vector<int>>::iterator it2;
     cout << "--------Variables--------" << endl;
-    for (it = vars.begin(); it != vars.end(); it++) {
+    for (it = VarTable.begin(); it != VarTable.end(); it++) {
         cout << it->first << " = " << it->second << endl;
     }
     cout << "-------------------------" << endl;
-    cout << "--------Arrays--------" << endl;
+    cout << "----------Arrays---------" << endl;
     for (it2 = ArrayTable.begin(); it2 != ArrayTable.end(); it2++) {
         cout << it2->first << ": ";
         for (int i = 0; i < (int)ArrayTable[it2->first].size(); i++) {
