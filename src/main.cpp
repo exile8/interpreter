@@ -425,7 +425,7 @@ bool Parser::getBinaryOperator() {
     int n = (int)sizeof(OPERATOR_STRING) / sizeof(string);
     skipSpaces();
     for (int i = 0; i < n; i++) {
-        if (PRIORITY[i] < 0) {
+        if (PRIORITY[i] <= 0) {
             continue;
         }
         string op = getSubcodeline(OPERATOR_STRING[i].size());
@@ -563,6 +563,7 @@ bool Parser::getEndwhile() {
 bool Parser::getLeftQBracket() {
     string op = getSubcodeline(1);
     if (op.compare(OPERATOR_STRING[LQBRACKET]) == 0) {
+        opers.push(new Binary(LQBRACKET));
         shift(1);
         return true;
     } else {
@@ -574,6 +575,8 @@ bool Parser::getRightQBracket() {
     string op = getSubcodeline(1);
     if (op.compare(OPERATOR_STRING[RQBRACKET]) == 0) {
         shift(1);
+        delete opers.top();
+        opers.pop();
         polizline.push_back(new Dereference());
         return true;
     } else {
@@ -583,18 +586,14 @@ bool Parser::getRightQBracket() {
 
 bool Parser::getExpression() {
     if (getNumber()) {
-        if (getAssignOperator() || getLeftBracket()) {
-            return false;
-        } else if (getBinaryOperator()) {
+        if (getBinaryOperator()) {
             return getExpression();
         } else {
             freeStack();
             return true;
         }
     } else if (getVariable()) {
-        if (getLeftBracket()) {
-            return false;
-        } else if (getAssignOperator() || getBinaryOperator()) {
+        if (getAssignOperator() || getBinaryOperator()) {
             return getExpression();
         } else if (getLeftQBracket() && getExpression() && getRightQBracket()) {
             if (getAssignOperator() || getBinaryOperator()) {
@@ -608,9 +607,7 @@ bool Parser::getExpression() {
             return true;
         }
     } else if (getLeftBracket() && getExpression() && getRightBracket()) {
-        if (getAssignOperator() || getLeftBracket()) {
-            return false;
-        } else if (getBinaryOperator()) {
+        if (getBinaryOperator()) {
             return getExpression();
         } else {
             freeStack();
