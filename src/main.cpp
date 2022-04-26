@@ -163,15 +163,15 @@ class ArrayElem : public Lexem {
     string name;
     int index;
 public:
-    ArrayElem(const Variable & array, int index);
+    ArrayElem(string name, int index);
     int getValue() const;
     void setValue(int value) const;
 };
 
 map<string, vector<int>> ArrayTable;
 
-ArrayElem::ArrayElem(const Variable & array, int index) {
-    name = array.getName();
+ArrayElem::ArrayElem(string name, int index) {
+    ArrayElem::name = name;
     ArrayElem::index = index;
 }
 
@@ -189,11 +189,11 @@ void ArrayElem::setValue(int value) const {
 class Dereference : public Oper {
 public:
     Dereference() : Oper(DEREF) {}
-    ArrayElem *getValue(const Variable & array, int index) const;
+    ArrayElem *getValue(string name, int index) const;
 };
 
-ArrayElem *Dereference::getValue(const Variable & array, int index) const {
-    ArrayElem *elem = new ArrayElem(array, index);
+ArrayElem *Dereference::getValue(string name, int index) const {
+    ArrayElem *elem = new ArrayElem(name, index);
     return elem;
 }
 
@@ -209,7 +209,7 @@ class Parser {
     int row;
     int position;
 
-    string subcodeline(int n);
+    string getSubcodeline(int n);
     void shift(int n);
     void skipSpaces();
 
@@ -219,7 +219,7 @@ class Parser {
     bool getSequenceOfCommands();
     bool getCommand();
     bool getExpression();
-    bool endOfLine();
+    bool isEndOfLine();
     bool isReservedWord(string word);
 
     bool getNumber();
@@ -254,10 +254,10 @@ class Parser {
 public:
     vector<vector<Lexem *>> poliz;
     bool buildPoliz(vector<string> code);
-    void erase();
+    void freePoliz();
 };
 
-string Parser::subcodeline(int n) {
+string Parser::getSubcodeline(int n) {
     string str;
     for (int i = 0; i < n && position + i < (int)code[row].size(); i++) {
         str.push_back(code[row][position + i]);
@@ -370,7 +370,7 @@ bool Parser::getVariable() {
            code[row][position + length] == '_') {
            length++;
     }
-    name = subcodeline(length);
+    name = getSubcodeline(length);
     if (isReservedWord(name)) {
         return false;
     }
@@ -388,7 +388,7 @@ bool Parser::getVariable() {
 
 bool Parser::getAssignOperator() {
     skipSpaces();
-    string op = subcodeline(2);
+    string op = getSubcodeline(2);
     if (op.compare(OPERATOR_STRING[ASSIGN]) == 0) {
         shift(2);
         sortOpersRight(new Assign());
@@ -400,7 +400,7 @@ bool Parser::getAssignOperator() {
 
 bool Parser::getLeftBracket() {
     skipSpaces();
-    string op = subcodeline(1);
+    string op = getSubcodeline(1);
     if (op.compare(OPERATOR_STRING[LBRACKET]) == 0) {
         opers.push(new Binary(LBRACKET));
         shift(1);
@@ -412,7 +412,7 @@ bool Parser::getLeftBracket() {
 
 bool Parser::getRightBracket() {
     skipSpaces();
-    string op = subcodeline(1);
+    string op = getSubcodeline(1);
     if (op.compare(OPERATOR_STRING[RBRACKET]) == 0) {
         buildBracketExpr();
         shift(1);
@@ -429,7 +429,7 @@ bool Parser::getBinaryOperator() {
         if (PRIORITY[i] < 0) {
             continue;
         }
-        string op = subcodeline(OPERATOR_STRING[i].size());
+        string op = getSubcodeline(OPERATOR_STRING[i].size());
         if (op.compare(OPERATOR_STRING[i]) == 0) {
             sortOpersLeft(new Binary(OPERATOR(i)));
             shift(OPERATOR_STRING[i].size());
@@ -466,7 +466,7 @@ bool Parser::getLabel() {
     }
     op.push_back(code[row][position + length]);
     if (op.compare(OPERATOR_STRING[COLON]) == 0) {
-        name = subcodeline(length);
+        name = getSubcodeline(length);
         if (initLabel(name) == false) {
             return false;
         }
@@ -479,7 +479,7 @@ bool Parser::getLabel() {
 
 bool Parser::getGoto() {
     skipSpaces();
-    string op = subcodeline(4);
+    string op = getSubcodeline(4);
     if (op.compare(OPERATOR_STRING[GOTO]) == 0) {
         opers.push(new Goto(GOTO));
         shift(4);
@@ -491,7 +491,7 @@ bool Parser::getGoto() {
 
 bool Parser::getIf() {
     skipSpaces();
-    string op = subcodeline(2);
+    string op = getSubcodeline(2);
     if (op.compare(OPERATOR_STRING[IF]) == 0) {
         opers.push(new Goto(IF));
         shift(2);
@@ -503,7 +503,7 @@ bool Parser::getIf() {
 
 bool Parser::getElse() {
     skipSpaces();
-    string op = subcodeline(4);
+    string op = getSubcodeline(4);
     if (op.compare(OPERATOR_STRING[ELSE]) == 0) {
         dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
         opers.pop();
@@ -518,7 +518,7 @@ bool Parser::getElse() {
 
 bool Parser::getWhile() {
     skipSpaces();
-    string op = subcodeline(5);
+    string op = getSubcodeline(5);
     if (op.compare(OPERATOR_STRING[WHILE]) == 0) {
         Goto *newWhile = new Goto(WHILE);
         newWhile->setRow(row);
@@ -532,7 +532,7 @@ bool Parser::getWhile() {
 
 bool Parser::getThen() {
     skipSpaces();
-    string op = subcodeline(4);
+    string op = getSubcodeline(4);
     if (op.compare(OPERATOR_STRING[THEN]) == 0) {
         polizline.push_back(opers.top());
         shift(4);
@@ -544,7 +544,7 @@ bool Parser::getThen() {
 
 bool Parser::getEndif() {
     skipSpaces();
-    string op = subcodeline(5);
+    string op = getSubcodeline(5);
     if (op.compare(OPERATOR_STRING[ENDIF]) == 0) {
         dynamic_cast<Goto *>(opers.top())->setRow(row + 1);
         opers.pop();
@@ -558,7 +558,7 @@ bool Parser::getEndif() {
 
 bool Parser::getEndwhile() {
     skipSpaces();
-    string op = subcodeline(8);
+    string op = getSubcodeline(8);
     if (op.compare(OPERATOR_STRING[ENDWHILE]) == 0) {
         Goto *endwhile = new Goto(ENDWHILE);
         int loopRow = dynamic_cast<Goto *>(opers.top())->getRow();
@@ -574,7 +574,7 @@ bool Parser::getEndwhile() {
 }
 
 bool Parser::getLeftQBracket() {
-    string op = subcodeline(1);
+    string op = getSubcodeline(1);
     if (op.compare(OPERATOR_STRING[LQBRACKET]) == 0) {
         shift(1);
         return true;
@@ -584,7 +584,7 @@ bool Parser::getLeftQBracket() {
 }
 
 bool Parser::getRightQBracket() {
-    string op = subcodeline(1);
+    string op = getSubcodeline(1);
     if (op.compare(OPERATOR_STRING[RQBRACKET]) == 0) {
         shift(1);
         polizline.push_back(new Dereference());
@@ -641,7 +641,7 @@ void Parser::putCommandInPoliz() {
     position = 0;
 }
 
-bool Parser::endOfLine() {
+bool Parser::isEndOfLine() {
     if (position == (int)code[row].size()) {
         return true;
     } else {
@@ -650,9 +650,9 @@ bool Parser::endOfLine() {
 }
 
 bool Parser::getElseBlock() {
-    if (getElse() && endOfLine()) {
+    if (getElse() && isEndOfLine()) {
         putCommandInPoliz();
-        if (getSequenceOfCommands() && getEndif() && endOfLine()) {
+        if (getSequenceOfCommands() && getEndif() && isEndOfLine()) {
             putCommandInPoliz();
             return true;
         } else {
@@ -664,12 +664,12 @@ bool Parser::getElseBlock() {
 }
 
 bool Parser::getIfBlock() {
-    if (getIf() && getExpression() && getThen() && endOfLine()) {
+    if (getIf() && getExpression() && getThen() && isEndOfLine()) {
         putCommandInPoliz();
         if (!getSequenceOfCommands()) {
             if (getElseBlock()) {
                 return true;
-            } else if (getEndif() && endOfLine()) {
+            } else if (getEndif() && isEndOfLine()) {
                 putCommandInPoliz();
                 return true;
             } else {
@@ -684,9 +684,9 @@ bool Parser::getIfBlock() {
 }
 
 bool Parser::getWhileBlock() {
-    if (getWhile() && getExpression() && getThen() && endOfLine()) {
+    if (getWhile() && getExpression() && getThen() && isEndOfLine()) {
         putCommandInPoliz();
-        if (!getSequenceOfCommands() && getEndwhile() && endOfLine()) {
+        if (!getSequenceOfCommands() && getEndwhile() && isEndOfLine()) {
             putCommandInPoliz();
             return true;
         } else {
@@ -698,7 +698,7 @@ bool Parser::getWhileBlock() {
 }
 
 bool Parser::getCommand() {
-    if (((getGoto() && getVariable()) || getLabel() || getExpression()) && endOfLine()) {
+    if (((getGoto() && getVariable()) || getLabel() || getExpression()) && isEndOfLine()) {
         putCommandInPoliz();
         return true;
     } else {
@@ -706,7 +706,7 @@ bool Parser::getCommand() {
     }
 }
 
-void Parser::erase() {
+void Parser::freePoliz() {
     for (int i = 0; i < (int)poliz.size(); i++) {
         for (int j = 0; j < (int)poliz[i].size(); j++) {
             delete poliz[i][j];
@@ -875,8 +875,8 @@ Lexem *currentResult(stack<Lexem *> & eval, Oper *op) {
             result = new Number(assign->getValue(*leftArr, rightArg));
         }
     } else if (deref != nullptr) {
-        Variable *arrName = dynamic_cast<Variable *>(eval.top());
-        result = deref->getValue(*arrName, rightArg);
+        string arrName = dynamic_cast<Variable *>(eval.top())->getName();
+        result = deref->getValue(arrName, rightArg);
     } else if (dynamic_cast<Number *>(eval.top())) {
         int leftNum = dynamic_cast<Number *>(eval.top())->getValue();
         result = new Number(binary->getValue(leftNum, rightArg));
@@ -1001,6 +1001,6 @@ int main() {
             printMap();
         }
     }
-    parser.erase();
+    parser.freePoliz();
     return 0;
 }
