@@ -91,8 +91,11 @@ string RESERVED[] = {
 class Lexem {
 public:
     Lexem() {}
-    virtual ~Lexem() {}
+    virtual ~Lexem();
 };
+
+Lexem::~Lexem() {
+}
 
 void print(vector<Lexem *> v);
 
@@ -106,14 +109,12 @@ public:
 class Variable : public Lexem {
     string name;
 public:
+    static map<string, int> VarTable;
     Variable(string name);
     string getName() const;
     int getValue() const;
     void setValue(int value) const;
 };
-
-map<string, int> VarTable;
-map<string, int> LabelTable;
 
 class Oper : public Lexem {
     OPERATOR opertype;
@@ -125,13 +126,17 @@ public:
 
 class Binary : public Oper {
 public:
-    Binary(OPERATOR opertype) : Oper(opertype) {}
+    Binary(OPERATOR opertype);
     int getValue(int left, int right) const;
 };
+
+Binary::Binary(OPERATOR opertype) : Oper(opertype) {
+}
 
 class Goto : public Oper {
     int row;
 public:
+    static map<string, int> LabelTable;
     Goto(OPERATOR opertype);
     void setRow(int row);
     int getRow();
@@ -163,12 +168,11 @@ class ArrayElem : public Lexem {
     string name;
     int index;
 public:
+    static map<string, vector<int>> ArrayTable;
     ArrayElem(string name, int index);
     int getValue() const;
     void setValue(int value) const;
 };
-
-map<string, vector<int>> ArrayTable;
 
 ArrayElem::ArrayElem(string name, int index) {
     ArrayElem::name = name;
@@ -188,9 +192,12 @@ void ArrayElem::setValue(int value) const {
 
 class Dereference : public Oper {
 public:
-    Dereference() : Oper(DEREF) {}
+    Dereference();
     ArrayElem *getValue(string name, int index) const;
 };
+
+Dereference::Dereference() : Oper(DEREF) {
+}
 
 ArrayElem *Dereference::getValue(string name, int index) const {
     ArrayElem *elem = new ArrayElem(name, index);
@@ -199,10 +206,13 @@ ArrayElem *Dereference::getValue(string name, int index) const {
 
 class Assign : public Oper {
 public:
-    Assign() : Oper(ASSIGN) {}
+    Assign();
     int getValue(const Variable & left, int right) const;
     int getValue(const ArrayElem & left, int right) const;
 };
+
+Assign::Assign() : Oper(ASSIGN) {
+}
 
 class Parser {
     vector<string> code;
@@ -214,7 +224,7 @@ class Parser {
     void skipSpaces();
 
     stack<Oper *> opers;
-    vector<Lexem *> polizline;
+    vector<Lexem *> newPolizline;
 
     bool getSequenceOfCommands();
     bool getCommand();
@@ -248,8 +258,8 @@ class Parser {
     void sortOpersRight(Oper *op);
     void sortOpersLeft(Oper *op);
     void putCommandInPoliz();
-    void freeStack();
-    void clear();
+    void emptyOpersStack();
+    void freePolizError();
 public:
     vector<vector<Lexem *>> poliz;
     bool buildPoliz(vector<string> code);
@@ -276,7 +286,7 @@ void Parser::skipSpaces() {
 
 void Parser::buildBracketExpr() {
     while (opers.top()->getType() != LBRACKET) {
-        polizline.push_back(opers.top());
+        newPolizline.push_back(opers.top());
         opers.pop();
     }
     delete opers.top();
@@ -286,7 +296,7 @@ void Parser::buildBracketExpr() {
 void Parser::sortOpersRight(Oper *op) {
     int curPriority = op->getPriority();
     while (!opers.empty() && opers.top()->getPriority() > curPriority) {
-        polizline.push_back(opers.top());
+        newPolizline.push_back(opers.top());
         opers.pop();
     }
     opers.push(op);
@@ -295,54 +305,45 @@ void Parser::sortOpersRight(Oper *op) {
 void Parser::sortOpersLeft(Oper *op) {
     int curPriority = op->getPriority();
     while (!opers.empty() && opers.top()->getPriority() >= curPriority) {
-        polizline.push_back(opers.top());
+        newPolizline.push_back(opers.top());
         opers.pop();
     }
     opers.push(op);
 }
 
-void Parser::freeStack() {
+void Parser::emptyOpersStack() {
     while (!opers.empty() && opers.top()->getPriority() >= 0) {
-        polizline.push_back(opers.top());
+        newPolizline.push_back(opers.top());
         opers.pop();
     }
 }
 
-void Parser::clear() {
-    freeStack();
-    print(polizline);
-    for (int i = 0; i < (int)poliz.size(); i++) {
-        for (int j = 0; j < (int)poliz[i].size(); j++) {
-            if (poliz[i][j] == nullptr) {
-                continue;
-            }
-            delete poliz[i][j];
-        }
-        poliz[i].clear();
-    }
-    for (int i = 0; i < (int)polizline.size(); i++) {
-        if (polizline[i] == nullptr) {
+void Parser::freePolizError() {
+    emptyOpersStack();
+    print(newPolizline);
+    freePoliz();
+    for (int i = 0; i < (int)newPolizline.size(); i++) {
+        if (newPolizline[i] == nullptr) {
             continue;
         }
-        delete polizline[i];
+        delete newPolizline[i];
     }
-    polizline.clear();
-    poliz.clear();
+    newPolizline.clear();
 }
 
 bool Parser::getNumber() {
     skipSpaces();
-    int number = code[row][position] - '0';
-    if (isdigit(code[row][position])) {
-        shift(1);
-    } else {
+    int number;
+    if (isdigit(code[row][position]) == false) {
         return false;
     }
+    number = code[row][position] - '0';
+    shift(1);
     while (isdigit(code[row][position])) {
         number = number * 10 + code[row][position] - '0';
         shift(1);
     }
-    polizline.push_back(new Number(number));
+    newPolizline.push_back(new Number(number));
     return true;
 }
 
@@ -360,26 +361,28 @@ bool Parser::getVariable() {
     skipSpaces();
     string name;
     int length = 0;
-    if (isalpha(code[row][position]) || code[row][position] == '_') {
-        length++;
-    } else {
+    if (isalpha(code[row][position]) == false &&
+        code[row][position] != '_') {
         return false;
     }
-    while (isalpha(code[row][position + length]) || isdigit(code[row][position + length]) ||
+    name.push_back(code[row][position]);
+    length++;
+    while (isalpha(code[row][position + length]) ||
+           isdigit(code[row][position + length]) ||
            code[row][position + length] == '_') {
-           length++;
+        name.push_back(code[row][position + length]);
+        length++;
     }
-    name = getSubcodeline(length);
     if (isReservedWord(name)) {
         return false;
     }
     shift(length);
-    polizline.push_back(new Variable(name));
+    newPolizline.push_back(new Variable(name));
     if (!opers.empty() && opers.top()->getType() == GOTO) {
-        if (LabelTable.count(name) == 0) {
-            LabelTable[name] = UNDEFINED;
+        if (Goto::LabelTable.count(name) == 0) {
+            Goto::LabelTable[name] = UNDEFINED;
         }
-        polizline.push_back(opers.top());
+        newPolizline.push_back(opers.top());
         opers.pop();
     }
     return true;
@@ -442,10 +445,10 @@ bool Parser::initLabel(string name) {
     if (isReservedWord(name)) {
         return false;
     }
-    if (LabelTable.count(name) > 0 && LabelTable[name] != UNDEFINED) {
+    if (Goto::LabelTable.count(name) > 0 && Goto::LabelTable[name] != UNDEFINED) {
         return false;
     } else {
-        LabelTable[name] = row + 1;
+        Goto::LabelTable[name] = row + 1;
         return true;
     }
 }
@@ -454,24 +457,28 @@ bool Parser::getLabel() {
     skipSpaces();
     string name, op;
     int length = 0;
-    if (isalpha(code[row][position]) || code[row][position] == '_') {
-        length++;
-    } else {
+    if (isalpha(code[row][position]) == false &&
+        code[row][position] != '_') {
         return false;
     }
-    while (isalpha(code[row][position + length]) || isdigit(code[row][position + length]) ||
+    name.push_back(code[row][position]);
+    length++;
+    while (isalpha(code[row][position + length]) ||
+           isdigit(code[row][position + length]) ||
            code[row][position + length] == '_') {
-           length++;
+        name.push_back(code[row][position + length]);
+        length++;
     }
     op.push_back(code[row][position + length]);
     if (op.compare(OPERATOR_STRING[COLON]) == 0) {
         name = getSubcodeline(length);
         if (initLabel(name) == false) {
             return false;
+        } else {
+            newPolizline.push_back(nullptr);
+            shift(length + 1);
+            return true;
         }
-        polizline.push_back(nullptr);
-        shift(length + 1);
-        return true;
     }
     return false;
 }
@@ -504,10 +511,11 @@ bool Parser::getElse() {
     skipSpaces();
     string op = getSubcodeline(4);
     if (op.compare(OPERATOR_STRING[ELSE]) == 0) {
-        polizline.push_back(new Goto(ELSE));
+        newPolizline.push_back(new Goto(ELSE));
         shift(4);
         return true;
     } else {
+        cout << op << endl;
         return false;
     }
 }
@@ -528,7 +536,8 @@ bool Parser::getThen() {
     skipSpaces();
     string op = getSubcodeline(4);
     if (op.compare(OPERATOR_STRING[THEN]) == 0) {
-        polizline.push_back(opers.top());
+        newPolizline.push_back(opers.top());
+        opers.pop();
         shift(4);
         return true;
     } else {
@@ -540,7 +549,7 @@ bool Parser::getEndif() {
     skipSpaces();
     string op = getSubcodeline(5);
     if (op.compare(OPERATOR_STRING[ENDIF]) == 0) {
-        polizline.push_back(nullptr);
+        newPolizline.push_back(nullptr);
         shift(5);
         return true;
     } else {
@@ -552,10 +561,12 @@ bool Parser::getEndwhile() {
     skipSpaces();
     string op = getSubcodeline(8);
     if (op.compare(OPERATOR_STRING[ENDWHILE]) == 0) {
-        polizline.push_back(new Goto(ENDWHILE));
+        newPolizline.push_back(new Goto(ENDWHILE));
         shift(8);
         return true;
     } else {
+        cout << op << endl;
+        cout << "Ha" << endl;
         return false;
     }
 }
@@ -577,7 +588,7 @@ bool Parser::getRightQBracket() {
         shift(1);
         delete opers.top();
         opers.pop();
-        polizline.push_back(new Dereference());
+        newPolizline.push_back(new Dereference());
         return true;
     } else {
         return false;
@@ -589,7 +600,7 @@ bool Parser::getExpression() {
         if (getBinaryOperator()) {
             return getExpression();
         } else {
-            freeStack();
+            emptyOpersStack();
             return true;
         }
     } else if (getVariable()) {
@@ -599,18 +610,18 @@ bool Parser::getExpression() {
             if (getAssignOperator() || getBinaryOperator()) {
                 return getExpression();
             } else {
-                freeStack();
+                emptyOpersStack();
                 return true;
             }
         } else {
-            freeStack();
+            emptyOpersStack();
             return true;
         }
     } else if (getLeftBracket() && getExpression() && getRightBracket()) {
         if (getBinaryOperator()) {
             return getExpression();
         } else {
-            freeStack();
+            emptyOpersStack();
             return true;
         }
     }
@@ -618,9 +629,9 @@ bool Parser::getExpression() {
 }
 
 void Parser::putCommandInPoliz() {
-    poliz.push_back(polizline);
-    print(polizline);
-    polizline.clear();
+    poliz.push_back(newPolizline);
+    print(newPolizline);
+    newPolizline.clear();
     row++;
     position = 0;
 }
@@ -663,7 +674,7 @@ bool Parser::getWhileBlock() {
         whileRow = row;
         putCommandInPoliz();
         if (!getSequenceOfCommands() && getEndwhile() && isEndOfLine()) {
-            dynamic_cast<Goto *>(polizline.front())->setRow(whileRow);
+            dynamic_cast<Goto *>(newPolizline.front())->setRow(whileRow);
             putCommandInPoliz();
             dynamic_cast<Goto *>(poliz[whileRow].back())->setRow(row);
             return true;
@@ -673,7 +684,8 @@ bool Parser::getWhileBlock() {
 }
 
 bool Parser::getCommand() {
-    if (((getGoto() && getVariable()) || getLabel() || getExpression()) && isEndOfLine()) {
+    if (((getGoto() && getVariable()) || getLabel() ||
+          getExpression()) && isEndOfLine()) {
         putCommandInPoliz();
         return true;
     } else {
@@ -709,7 +721,7 @@ bool Parser::buildPoliz(vector<string> code) {
     if (getSequenceOfCommands() && (row == (int)code.size())) {
         return true;
     } else {
-        clear();
+        freePolizError();
         cerr << "Syntax error: line " << row + 1 << endl;
         return false;
     }
@@ -823,7 +835,11 @@ int Assign::getValue(const ArrayElem & left, int right) const {
     }
 }
 
-Lexem *currentResult(stack<Lexem *> & eval, Oper *op) {
+map<string, int> Variable::VarTable;
+map<string, vector<int>> ArrayElem::ArrayTable;
+map<string, int> Goto::LabelTable;
+
+Lexem *currentResult(stack<Lexem *> & eval, Lexem *op) {
     int rightArg;
     Lexem *result;
     Binary *binary = dynamic_cast<Binary *>(op);
@@ -879,7 +895,8 @@ int jump(Goto *op, stack<Lexem *> & eval, size_t row) {
     OPERATOR type = op->getType();
     bool condition = false;
     if (type == GOTO) {
-        return op->getValue(*(dynamic_cast<Variable *>(eval.top())));
+        Variable *label = dynamic_cast<Variable *>(eval.top());
+        return op->getValue(*label);
     }
     if (eval.empty() == false) {
         condition = getCondition(eval.top());
@@ -894,20 +911,20 @@ int jump(Goto *op, stack<Lexem *> & eval, size_t row) {
     return op->getRow();
 }
 
-int evaluatePostfix(vector<Lexem *> postfix, int row) {
+int evaluatePoliz(vector<Lexem *> poliz, int row) {
     int value, nextRow = row + 1;
     stack<Lexem *> eval;
-    vector<Lexem *>::iterator it;
     vector<Lexem *> temporary;
-    for (it = postfix.begin(); it != postfix.end(); it++) {
-        if (*it == nullptr) {
+    for (int i = 0; i < (int)poliz.size(); i++) {
+        if (poliz[i] == nullptr) {
             continue;
-        } else if (dynamic_cast<Number *>(*it) || dynamic_cast<Variable *>(*it)) {
-            eval.push(*it);
-        } else if (dynamic_cast<Goto *>(*it)) {
-            nextRow = jump(dynamic_cast<Goto *>(*it), eval, row);
+        } else if (dynamic_cast<Number *>(poliz[i]) ||
+                   dynamic_cast<Variable *>(poliz[i])) {
+            eval.push(poliz[i]);
+        } else if (dynamic_cast<Goto *>(poliz[i])) {
+            nextRow = jump(dynamic_cast<Goto *>(poliz[i]), eval, row);
         } else {
-            temporary.push_back(currentResult(eval, dynamic_cast<Oper *>(*it)));
+            temporary.push_back(currentResult(eval, poliz[i]));
             eval.push(temporary.back());
         }
     }
@@ -946,15 +963,15 @@ void printMap() {
     map<string, int>::iterator it;
     map<string, vector<int>>::iterator it2;
     cout << "--------Variables--------" << endl;
-    for (it = VarTable.begin(); it != VarTable.end(); it++) {
+    for (it = Variable::VarTable.begin(); it != Variable::VarTable.end(); it++) {
         cout << it->first << " = " << it->second << endl;
     }
     cout << "-------------------------" << endl;
     cout << "----------Arrays---------" << endl;
-    for (it2 = ArrayTable.begin(); it2 != ArrayTable.end(); it2++) {
+    for (it2 = ArrayElem::ArrayTable.begin(); it2 != ArrayElem::ArrayTable.end(); it2++) {
         cout << it2->first << ": ";
-        for (int i = 0; i < (int)ArrayTable[it2->first].size(); i++) {
-            cout << "[" << ArrayTable[it2->first][i] << "] ";
+        for (int i = 0; i < (int)ArrayElem::ArrayTable[it2->first].size(); i++) {
+            cout << "[" << ArrayElem::ArrayTable[it2->first][i] << "] ";
         }
         cout << endl;
     }
@@ -967,12 +984,13 @@ int main() {
     string codeline;
     while (getline(cin, codeline)) {
         code.push_back(codeline);
+        cout << codeline << endl;
     }
 
     if (parser.buildPoliz(code)) {
         int i = 0;
         while (i < (int)code.size()) {
-            i = evaluatePostfix(parser.poliz[i], i);
+            i = evaluatePoliz(parser.poliz[i], i);
             printMap();
         }
     }
