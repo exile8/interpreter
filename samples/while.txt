@@ -1,0 +1,7 @@
+i := 0
+x := 2
+while i < 10 then
+    i := i + 1
+    x := x * 2
+endwhile
+i := 0

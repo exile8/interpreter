@@ -1,0 +1,12 @@
+i := 100
+x := 0
+y := 0
+while i > 0 then
+    if (i % 3) == 0 then
+        x := x + 1
+    else
+        y := y + 1
+    endif
+    i := i - 1
+endwhile
+i := 100
