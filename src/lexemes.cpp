@@ -1,20 +1,10 @@
-#include <iostream>
-#include <string>
-#include <vector>
-#include <stack>
-#include <map>
-#include <cctype>
 #include "lexemes.h"
 
-using std::getline;
-using std::cin;
 using std::cout;
 using std::endl;
-using std::string;
-using std::vector;
-using std::stack;
-using std::map;
 using std::cerr;
+
+#define UNDEFINED -1
 
 Lexem::Lexem() {
 }

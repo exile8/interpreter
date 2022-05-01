@@ -1,5 +1,10 @@
+#include <iostream>
 #include "lexemes.h"
 #include "interpreter.h"
+
+using std::cout;
+using std::endl;
+using std::cerr;
 
 string Parser::getSubcodeline(int n) {
     string str;
@@ -55,7 +60,7 @@ void Parser::emptyOpersStack() {
 
 void Parser::freePolizError() {
     emptyOpersStack();
-  //  print(newPolizline);
+    print(newPolizline);
     freePoliz();
     for (int i = 0; i < (int)newPolizline.size(); i++) {
         if (newPolizline[i] == nullptr) {
@@ -365,7 +370,7 @@ bool Parser::getExpression() {
 
 void Parser::putCommandInPoliz() {
     poliz.push_back(newPolizline);
-//    print(newPolizline);
+    print(newPolizline);
     newPolizline.clear();
     row++;
     position = 0;

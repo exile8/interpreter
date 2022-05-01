@@ -1,6 +1,8 @@
 #include "lexemes.h"
 #include "interpreter.h"
 
+using std::cin;
+
 int main() {
     Parser parser;
     vector<string> code;
