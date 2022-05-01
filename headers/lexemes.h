@@ -1,25 +1,18 @@
 #ifndef LEXEMES_H
 #define LEXEMES_H
 
-
 #include <iostream>
 #include <string>
 #include <vector>
-#include <stack>
 #include <map>
-#include <cctype>
 
-using std::getline;
-using std::cin;
-using std::cout;
-using std::endl;
 using std::string;
 using std::vector;
-using std::stack;
 using std::map;
-using std::cerr;
 
-#define UNDEFINED -1
+enum {
+    UNDEFINED = -1
+};
 
 enum OPERATOR {
     IF, THEN,
