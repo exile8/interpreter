@@ -1,6 +1,10 @@
 #ifndef INTERPRETER_H
 #define INTERPRETER_H
 
+#include <stack>
+
+using std::stack;
+
 class Parser {
     vector<string> code;
     int row;
