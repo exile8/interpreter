@@ -42,6 +42,9 @@ ArrayElem::ArrayElem(string name, int index) {
 }
 
 int ArrayElem::getValue() const {
+    if ((int)ArrayTable[name].size() < index + 1) {
+        ArrayTable[name].resize(index + 1);
+    }
     return ArrayTable[name][index];
 }
 
