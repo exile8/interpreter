@@ -57,6 +57,14 @@ public:
     void freePoliz();
 };
 
+int getRightArgument(Lexem *operand);
+
+Lexem *performAssignment(Lexem *leftArg, int rightArg, Assign *assign);
+
+Lexem *performDereference(Lexem *leftArg, int rightArg, Dereference *deref);
+
+Lexem *performCalculation(Lexem *leftArg, int rightArg, Binary *binary);
+
 Lexem *currentResult(stack<Lexem *> & eval, Lexem *op);
 
 bool getCondition(Lexem *condition);

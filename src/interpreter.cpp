@@ -467,44 +467,67 @@ bool Parser::buildPoliz(vector<string> code) {
     }
 }
 
+int getRightArgument(Lexem *operand) {
+    if (dynamic_cast<Number *>(operand)) {
+        return dynamic_cast<Number *>(operand)->getValue();
+    } else if (dynamic_cast<Variable *>(operand)) {
+        return dynamic_cast<Variable *>(operand)->getValue();
+    } else {
+        return dynamic_cast<ArrayElem *>(operand)->getValue();
+    }
+}
+
+Lexem *performAssignment(Lexem *leftArg, int rightArg, Assign *assign) {
+    Lexem *result;
+    if (dynamic_cast<Variable *>(leftArg)) {
+            Variable *left = dynamic_cast<Variable *>(leftArg);
+            result = new Number(assign->getValue(*left, rightArg));
+        } else {
+            ArrayElem *leftArr = dynamic_cast<ArrayElem *>(leftArg);
+            result = new Number(assign->getValue(*leftArr, rightArg));
+        }
+    return result;
+}
+
+Lexem *performDereference(Lexem *leftArg, int rightArg, Dereference *deref) {
+    Lexem *result;
+    string arrName = dynamic_cast<Variable *>(leftArg)->getName();
+    result = deref->getValue(arrName, rightArg);
+    return result;
+}
+
+Lexem *performCalculation(Lexem *leftArg, int rightArg, Binary *binary) {
+    Lexem *result;
+    if (dynamic_cast<Number *>(leftArg)) {
+        int leftNum = dynamic_cast<Number *>(leftArg)->getValue();
+        result = new Number(binary->getValue(leftNum, rightArg));
+    } else if (dynamic_cast<Variable *>(leftArg)) {
+        int leftVar = dynamic_cast<Variable *>(leftArg)->getValue();
+        result = new Number(binary->getValue(leftVar, rightArg));
+    } else {
+        int leftArrElem = dynamic_cast<ArrayElem *>(leftArg)->getValue();
+        result = new Number(binary->getValue(leftArrElem, rightArg));
+    }
+    return result;
+}
+
 Lexem *currentResult(stack<Lexem *> & eval, Lexem *op) {
-    int rightArg;
     Lexem *result;
     Binary *binary = dynamic_cast<Binary *>(op);
     Assign *assign = dynamic_cast<Assign *>(op);
     Dereference *deref = dynamic_cast<Dereference *>(op);
-    if (dynamic_cast<Number *>(eval.top())) {
-        rightArg = dynamic_cast<Number *>(eval.top())->getValue();
-    } else if (dynamic_cast<Variable *>(eval.top())){
-        rightArg = dynamic_cast<Variable *>(eval.top())->getValue();
-    } else {
-        rightArg = dynamic_cast<ArrayElem *>(eval.top())->getValue();
-    }
+    int rightArg = getRightArgument(eval.top());
     eval.pop();
     if (eval.empty()) {
         result = new Number(rightArg);
         return result;
     }
     if (assign != nullptr) {
-        if (dynamic_cast<Variable *>(eval.top())) {
-            Variable *left = dynamic_cast<Variable *>(eval.top());
-            result = new Number(assign->getValue(*left, rightArg));
-        } else {
-            ArrayElem *leftArr = dynamic_cast<ArrayElem *>(eval.top());
-            result = new Number(assign->getValue(*leftArr, rightArg));
-        }
+        result = performAssignment(eval.top(), rightArg, assign);
     } else if (deref != nullptr) {
-        string arrName = dynamic_cast<Variable *>(eval.top())->getName();
-        result = deref->getValue(arrName, rightArg);
-    } else if (dynamic_cast<Number *>(eval.top())) {
-        int leftNum = dynamic_cast<Number *>(eval.top())->getValue();
-        result = new Number(binary->getValue(leftNum, rightArg));
-    } else if (dynamic_cast<Variable *>(eval.top())){
-        int leftVar = dynamic_cast<Variable *>(eval.top())->getValue();
-        result = new Number(binary->getValue(leftVar, rightArg));
+        result = performDereference(eval.top(), rightArg, deref);
     } else {
-        int leftArrElem = dynamic_cast<ArrayElem *>(eval.top())->getValue();
-        result = new Number(binary->getValue(leftArrElem, rightArg));
+        result = performCalculation(eval.top(), rightArg, binary);
     }
     eval.pop();
     return result;
@@ -556,8 +579,13 @@ int evaluatePoliz(vector<Lexem *> poliz, int row) {
             eval.push(temporary.back());
         }
     }
-    if (eval.empty() == false && dynamic_cast<Number *>(eval.top())) {
-        value = dynamic_cast<Number *>(eval.top())->getValue();
+    if (eval.empty() == false) {
+        if (dynamic_cast<ArrayElem *>(eval.top())) {
+            value = dynamic_cast<ArrayElem *>(eval.top())->getValue();
+        }
+        if (dynamic_cast<Number *>(eval.top())) {
+            value = dynamic_cast<Number *>(eval.top())->getValue();
+        }
         cout << value << endl;
     }
     for (int i = 0; i < (int)temporary.size(); i++) {
