@@ -255,7 +255,6 @@ bool Parser::getElse() {
         shift(4);
         return true;
     } else {
-        cout << op << endl;
         return false;
     }
 }
@@ -289,7 +288,7 @@ bool Parser::getEndif() {
     skipSpaces();
     string op = getSubcodeline(5);
     if (op.compare(OPERATOR_STRING[ENDIF]) == 0) {
-        newPolizline.push_back(nullptr);
+        newPolizline.push_back(new Goto(ENDIF));
         shift(5);
         return true;
     } else {
@@ -305,8 +304,6 @@ bool Parser::getEndwhile() {
         shift(8);
         return true;
     } else {
-        cout << op << endl;
-        cout << "Ha" << endl;
         return false;
     }
 }
@@ -389,16 +386,21 @@ bool Parser::getIfBlock() {
     if (getIf() && getExpression() && getThen() && isEndOfLine()) {
         ifRow = row;
         putCommandInPoliz();
-        if (!getSequenceOfCommands()) {
-            if (getElse() && isEndOfLine()) {
+        if (getSequenceOfCommands() && newPolizline.empty() == false) {
+            Goto *iflexem = dynamic_cast<Goto *>(newPolizline.front());
+            if (iflexem != nullptr && iflexem->getType() == ELSE) {
                 dynamic_cast<Goto *>(poliz[ifRow].back())->setRow(row + 1);
                 ifRow = row;
                 putCommandInPoliz();
-                if (getSequenceOfCommands()) {
+                if (getSequenceOfCommands() == false || newPolizline.empty()) {
                     return false;
                 }
+                iflexem = dynamic_cast<Goto *>(newPolizline.front());
             }
-            if (getEndif() && isEndOfLine()) {
+            if (iflexem != nullptr && iflexem->getType() == ENDIF) {
+                delete iflexem;
+                newPolizline.clear();
+                newPolizline.push_back(nullptr);
                 putCommandInPoliz();
                 dynamic_cast<Goto *>(poliz[ifRow].back())->setRow(row);
                 return true;
@@ -413,8 +415,12 @@ bool Parser::getWhileBlock() {
     if (getWhile() && getExpression() && getThen() && isEndOfLine()) {
         whileRow = row;
         putCommandInPoliz();
-        if (!getSequenceOfCommands() && getEndwhile() && isEndOfLine()) {
-            dynamic_cast<Goto *>(newPolizline.front())->setRow(whileRow);
+        if (getSequenceOfCommands() && newPolizline.empty() == false) {
+            Goto *endwhile = dynamic_cast<Goto *>(newPolizline.front());
+            if (endwhile == nullptr || endwhile->getType() != ENDWHILE) {
+                return false;
+            }
+            dynamic_cast<Goto *>(endwhile)->setRow(whileRow);
             putCommandInPoliz();
             dynamic_cast<Goto *>(poliz[whileRow].back())->setRow(row);
             return true;
@@ -446,6 +452,8 @@ void Parser::freePoliz() {
 
 bool Parser::getSequenceOfCommands() {
     if (row == (int)code.size()) {
+        return true;
+    } else if ((getEndwhile() || getEndif() || getElse()) && isEndOfLine()) {
         return true;
     } else if (getWhileBlock() || getIfBlock() || getCommand()) {
         return getSequenceOfCommands();
@@ -582,11 +590,12 @@ int evaluatePoliz(vector<Lexem *> poliz, int row) {
     if (eval.empty() == false) {
         if (dynamic_cast<ArrayElem *>(eval.top())) {
             value = dynamic_cast<ArrayElem *>(eval.top())->getValue();
+            cout << value << endl;
         }
         if (dynamic_cast<Number *>(eval.top())) {
             value = dynamic_cast<Number *>(eval.top())->getValue();
+            cout << value << endl;
         }
-        cout << value << endl;
     }
     for (int i = 0; i < (int)temporary.size(); i++) {
         delete temporary[i];
@@ -633,3 +642,4 @@ void printMap() {
     }
     cout << "-------------------------" << endl;
 }
+
