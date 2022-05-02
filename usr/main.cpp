@@ -18,7 +18,7 @@ int main() {
             i = evaluatePoliz(parser.poliz[i], i);
             printMap();
         }
+        parser.freePoliz();
     }
-    parser.freePoliz();
     return 0;
 }
