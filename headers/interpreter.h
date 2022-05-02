@@ -9,6 +9,10 @@ class Parser {
     vector<string> code;
     int row;
     int position;
+    enum STATE {
+        OKAY,
+        ERROR
+    };
 
     string getSubcodeline(int n);
     void shift(int n);
@@ -49,12 +53,11 @@ class Parser {
     void sortOpersRight(Oper *op);
     void sortOpersLeft(Oper *op);
     void putCommandInPoliz();
-    void emptyOpersStack();
-    void freePolizError();
+    void emptyOpersStack(STATE state = OKAY);
 public:
     vector<vector<Lexem *>> poliz;
     bool buildPoliz(vector<string> code);
-    void freePoliz();
+    void freePoliz(STATE state = OKAY);
 };
 
 int getRightArgument(Lexem *operand);
