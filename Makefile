@@ -3,7 +3,7 @@ SRC=src/
 LIB=lib/
 BIN=bin/
 CFLAGS=-Wall -Werror -fsanitize=leak,address -g
-LDFLAGS=-fpic -shared
+LDFLAGS=-fpic -shared -g
 
 all: $(BIN) libinterpreter.so liblexemes.so
 	g++ usr/main.cpp -I $(INCLUDE) -L $(LIB) $(CFLAGS) -linterpreter -llexemes -o $(BIN)interpreter $(CFLAGS)
