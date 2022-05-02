@@ -2,6 +2,7 @@
 #include "interpreter.h"
 
 using std::cin;
+using std::getline;
 
 int main() {
     Parser parser;
