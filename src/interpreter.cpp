@@ -35,7 +35,8 @@ void Parser::buildBracketExpr() {
 
 void Parser::sortOpersRight(Oper *op) {
     int curPriority = op->getPriority();
-    while (!opers.empty() && opers.top()->getPriority() > curPriority) {
+    while (opers.empty() == false &&
+           opers.top()->getPriority() > curPriority) {
         newPolizline.push_back(opers.top());
         opers.pop();
     }
@@ -44,31 +45,25 @@ void Parser::sortOpersRight(Oper *op) {
 
 void Parser::sortOpersLeft(Oper *op) {
     int curPriority = op->getPriority();
-    while (!opers.empty() && opers.top()->getPriority() >= curPriority) {
+    while (opers.empty() == false && 
+           opers.top()->getPriority() >= curPriority) {
         newPolizline.push_back(opers.top());
         opers.pop();
     }
     opers.push(op);
 }
 
-void Parser::emptyOpersStack() {
-    while (!opers.empty() && opers.top()->getPriority() >= 0) {
+void Parser::emptyOpersStack(STATE state /*= OKAY*/) {
+    while (opers.empty() == false && opers.top()->getPriority() >= 0) {
         newPolizline.push_back(opers.top());
         opers.pop();
     }
-}
-
-void Parser::freePolizError() {
-    emptyOpersStack();
-    print(newPolizline);
-    freePoliz();
-    for (int i = 0; i < (int)newPolizline.size(); i++) {
-        if (newPolizline[i] == nullptr) {
-            continue;
+    if (state == ERROR) {
+        while (opers.empty() == false) {
+            delete opers.top();
+            opers.pop();
         }
-        delete newPolizline[i];
     }
-    newPolizline.clear();
 }
 
 bool Parser::getNumber() {
@@ -367,7 +362,6 @@ bool Parser::getExpression() {
 
 void Parser::putCommandInPoliz() {
     poliz.push_back(newPolizline);
-    print(newPolizline);
     newPolizline.clear();
     row++;
     position = 0;
@@ -430,7 +424,11 @@ bool Parser::getWhileBlock() {
 }
 
 bool Parser::getCommand() {
-    if (((getGoto() && getVariable()) || getLabel() ||
+    if (code[row].empty() == true) {
+        newPolizline.push_back(nullptr);
+        putCommandInPoliz();
+        return true;
+    } else if (((getGoto() && getVariable()) || getLabel() ||
           getExpression()) && isEndOfLine()) {
         putCommandInPoliz();
         return true;
@@ -439,7 +437,11 @@ bool Parser::getCommand() {
     }
 }
 
-void Parser::freePoliz() {
+void Parser::freePoliz(STATE state /*= OKAY*/) {
+    if (state == ERROR) {
+        emptyOpersStack(ERROR);
+        poliz.push_back(newPolizline);
+    }
     for (int i = 0; i < (int)poliz.size(); i++) {
         for (int j = 0; j < (int)poliz[i].size(); j++) {
             delete poliz[i][j];
@@ -455,7 +457,7 @@ bool Parser::getSequenceOfCommands() {
         return true;
     } else if ((getEndwhile() || getEndif() || getElse()) && isEndOfLine()) {
         return true;
-    } else if (getWhileBlock() || getIfBlock() || getCommand()) {
+    } else if (getCommand() || getWhileBlock() || getIfBlock()) {
         return getSequenceOfCommands();
     } else {
         return false;
@@ -469,8 +471,9 @@ bool Parser::buildPoliz(vector<string> code) {
     if (getSequenceOfCommands() && (row == (int)code.size())) {
         return true;
     } else {
-        freePolizError();
-        cerr << "Syntax error: line " << row + 1 << endl;
+        freePoliz(ERROR);
+        cerr << '\n' <<"#######" << '\n' <<
+            "Syntax error: line " << row + 1 << endl;
         return false;
     }
 }
