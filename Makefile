@@ -1,11 +1,12 @@
 INCLUDE=headers/
 SRC=src/
 LIB=lib/
+BIN=bin/
 CFLAGS=-Wall -Werror -fsanitize=leak,address -g
 LDFLAGS=-fpic -shared
 
-all: bin libinterpreter.so liblexemes.so
-	g++ usr/main.cpp -I $(INCLUDE) -L $(LIB) $(CFLAGS) -linterpreter -llexemes -o bin/interpreter $(CFLAGS)
+all: $(BIN) libinterpreter.so liblexemes.so
+	g++ usr/main.cpp -I $(INCLUDE) -L $(LIB) $(CFLAGS) -linterpreter -llexemes -o $(BIN)interpreter $(CFLAGS)
 
 libinterpreter.so: $(LIB)
 	g++ $(SRC)interpreter.cpp -o $(LIB)libinterpreter.so -I $(INCLUDE) $(LDFLAGS)
@@ -16,9 +17,9 @@ liblexemes.so: $(LIB)
 $(LIB):
 	mkdir $(LIB)
 
-bin:
-	mkdir bin
+$(BIN):
+	mkdir $(BIN)
 
 clean:
 	rm -r $(LIB)
-	rm -r bin
+	rm -r $(BIN)
